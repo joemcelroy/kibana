@@ -5,4 +5,4 @@
  * 2.0.
  */
 
-export { ElasticsearchConnectionGuide } from './elasticsearch_connection_guide';
+export { ElasticsearchCloudId } from './elasticsearch_cloud_id';
