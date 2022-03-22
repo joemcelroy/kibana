@@ -20,6 +20,7 @@ import {
 } from '@elastic/eui';
 
 import { ElasticsearchResources } from '../elasticsearch_resources';
+import { ElasticsearchConnectionGuide } from '../elasticsearch_connection_guide';
 
 const steps = [
   {
@@ -102,8 +103,9 @@ const steps = [
 
 export const ElasticsearchGuide: React.FC = () => (
   <EuiPageTemplate pageHeader={{ pageTitle: 'Elasticsearch' }}>
-    Content goes here
-    <EuiText>
+    <EuiFlexGroup alignItems="flexStart">
+      <EuiFlexItem grow={3}>
+      <EuiText>
       <h2>Getting started with Elasticsearch</h2>
       <p>
         Whether you are building a search-powered application, or designing a large-scale search
@@ -111,6 +113,11 @@ export const ElasticsearchGuide: React.FC = () => (
         performant search experience.{' '}
       </p>
     </EuiText>
+      </EuiFlexItem>
+      <EuiFlexItem grow={1}>
+        <ElasticsearchConnectionGuide />
+      </EuiFlexItem>
+    </EuiFlexGroup>
     <EuiSpacer />
     <EuiFlexGroup alignItems="flexStart">
       <EuiFlexItem grow={3}>
