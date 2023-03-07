@@ -75,13 +75,16 @@ export function registerAnalyticsRoutes({
       const { client } = (await context.core).elasticsearch;
 
       try {
-        const collection = await fetchAnalyticsCollectionById(client, request.params.id);
+        const collection = await client.asCurrentUser.transport.request<{}>({
+          method: 'GET',
+          path: `/_behavioral_analytics/${request.params.id}`,
+        });
 
-        if (!collection) {
-          throw new Error(ErrorCode.ANALYTICS_COLLECTION_NOT_FOUND);
-        }
-
-        return response.ok({ body: collection });
+        return response.ok({
+          body: {
+            collection,
+          },
+        });
       } catch (error) {
         if ((error as Error).message === ErrorCode.ANALYTICS_COLLECTION_NOT_FOUND) {
           return createIndexNotFoundError(error, response);
@@ -111,12 +114,17 @@ export function registerAnalyticsRoutes({
       );
 
       try {
-        const body = await addAnalyticsCollection(
-          elasticsearchClient,
-          dataViewsService,
-          request.body
-        );
-        return response.ok({ body });
+        const collection = await elasticsearchClient.asCurrentUser.transport.request<{}>({
+          method: 'PUT',
+          path: `/_behavioral_analytics/${request.body.name}`,
+          body: {},
+        });
+
+        return response.ok({
+          body: {
+            collection,
+          },
+        });
       } catch (error) {
         if ((error as Error).message === ErrorCode.ANALYTICS_COLLECTION_ALREADY_EXISTS) {
           return createError({
