@@ -44,6 +44,14 @@ interface AnalyticsRouteDependencies extends RouteDependencies {
   savedObjects: SavedObjectsServiceStart;
 }
 
+interface AnalyticsCollectionResponse {
+  [key: string]: {
+    event_data_stream: {
+      name: string;
+    };
+  };
+}
+
 export function registerAnalyticsRoutes({
   router,
   log,
@@ -75,10 +83,11 @@ export function registerAnalyticsRoutes({
       const { client } = (await context.core).elasticsearch;
 
       try {
-        const collection = await client.asCurrentUser.transport.request<{}>({
-          method: 'GET',
-          path: `/_behavioral_analytics/${request.params.id}`,
-        });
+        const collection =
+          await client.asCurrentUser.transport.request<AnalyticsCollectionResponse>({
+            method: 'GET',
+            path: `/_behavioral_analytics/${request.params.id}`,
+          });
 
         return response.ok({
           body: {
@@ -114,11 +123,12 @@ export function registerAnalyticsRoutes({
       );
 
       try {
-        const collection = await elasticsearchClient.asCurrentUser.transport.request<{}>({
-          method: 'PUT',
-          path: `/_behavioral_analytics/${request.body.name}`,
-          body: {},
-        });
+        const collection =
+          await elasticsearchClient.asCurrentUser.transport.request<AnalyticsCollectionResponse>({
+            method: 'PUT',
+            path: `/_behavioral_analytics/${request.body.name}`,
+            body: {},
+          });
 
         return response.ok({
           body: {
