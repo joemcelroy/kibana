@@ -7,9 +7,11 @@
 
 import { i18n } from '@kbn/i18n';
 import {
+  copyToClipboard,
   EuiBasicTable,
   EuiBasicTableColumn,
   EuiButton,
+  EuiButtonIcon,
   EuiLink,
   EuiMarkdownFormat,
   EuiSpacer,
@@ -21,11 +23,19 @@ import { ValuesType } from 'utility-types';
 import { FormattedMessage } from '@kbn/i18n-react';
 import { AgentApiDetails, AgentInstructions } from '../instruction_variants';
 import { ApiKeyCallout } from './api_key_callout';
+import { agentStatusCheckInstruction } from '../agent_status_instructions';
 
 export const createOpenTelemetryAgentInstructions = (
   commonOptions: AgentInstructions
 ): EuiStepProps[] => {
-  const { baseUrl, apmServerUrl, apiKeyDetails } = commonOptions;
+  const {
+    baseUrl,
+    apmServerUrl,
+    apiKeyDetails,
+    checkAgentStatus,
+    agentStatus,
+    agentStatusLoading,
+  } = commonOptions;
   return [
     {
       title: i18n.translate('xpack.apm.onboarding.otel.download.title', {
@@ -96,6 +106,11 @@ export const createOpenTelemetryAgentInstructions = (
         </>
       ),
     },
+    agentStatusCheckInstruction({
+      checkAgentStatus,
+      agentStatus,
+      agentStatusLoading,
+    }),
   ];
 };
 
@@ -131,9 +146,25 @@ function ConfigurationValueColumn({
   }
 
   return (
-    <EuiText size="s" color="accent">
-      {value}
-    </EuiText>
+    <>
+      <EuiText size="s" color="accent">
+        {value}
+      </EuiText>
+      {value && (
+        <EuiButtonIcon
+          data-test-subj="apmConfigurationValueColumnButton"
+          aria-label={i18n.translate(
+            'xpack.apm.onboarding.otel.column.value.copyIconText',
+            {
+              defaultMessage: 'Copy to clipboard',
+            }
+          )}
+          color="text"
+          iconType="copy"
+          onClick={() => copyToClipboard(value)}
+        />
+      )}
+    </>
   );
 }
 
@@ -151,7 +182,7 @@ export function OpenTelemetryInstructions({
   if (secretToken) {
     authHeaderValue = `Authorization=Bearer ${secretToken}`;
   } else {
-    authHeaderValue = `Authorization=ApiKey ${apiKeyDetails?.encodedKey}`;
+    authHeaderValue = `Authorization=ApiKey ${apiKeyDetails?.apiKey}`;
   }
   const items = [
     {
@@ -183,6 +214,7 @@ export function OpenTelemetryInstructions({
   const columns: Array<EuiBasicTableColumn<ValuesType<typeof items>>> = [
     {
       field: 'setting',
+      width: '23%',
       name: i18n.translate(
         'xpack.apm.onboarding.config_otel.column.configSettings',
         {
@@ -192,6 +224,7 @@ export function OpenTelemetryInstructions({
     },
     {
       field: 'value',
+      width: '55%',
       name: i18n.translate(
         'xpack.apm.onboarding.config_otel.column.configValue',
         {

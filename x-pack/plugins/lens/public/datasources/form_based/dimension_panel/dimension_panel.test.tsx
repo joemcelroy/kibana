@@ -15,6 +15,7 @@ import {
   EuiListGroup,
   EuiRange,
   EuiSelect,
+  EuiComboBoxProps,
 } from '@elastic/eui';
 import { unifiedSearchPluginMock } from '@kbn/unified-search-plugin/public/mocks';
 import { dataViewPluginMocks } from '@kbn/data-views-plugin/public/mocks';
@@ -27,7 +28,7 @@ import {
 import { mountWithIntl as mount } from '@kbn/test-jest-helpers';
 import { IUiSettingsClient, HttpSetup, CoreStart, NotificationsStart } from '@kbn/core/public';
 import { IStorageWrapper } from '@kbn/kibana-utils-plugin/public';
-import { useExistingFieldsReader } from '@kbn/unified-field-list-plugin/public/hooks/use_existing_fields';
+import { useExistingFieldsReader } from '@kbn/unified-field-list/src/hooks/use_existing_fields';
 import { generateId } from '../../../id_generator';
 import { FormBasedPrivateState } from '../types';
 import { LayerTypes } from '@kbn/expression-xy-plugin/public';
@@ -77,7 +78,7 @@ jest.mock('../operations/definitions/formula/editor/formula_editor', () => {
   };
 });
 
-jest.mock('@kbn/unified-field-list-plugin/public/hooks/use_existing_fields', () => ({
+jest.mock('@kbn/unified-field-list/src/hooks/use_existing_fields', () => ({
   useExistingFieldsReader: jest.fn(() => {
     return {
       hasFieldData: (dataViewId: string, fieldName: string) => {
@@ -86,6 +87,13 @@ jest.mock('@kbn/unified-field-list-plugin/public/hooks/use_existing_fields', () 
     };
   }),
 }));
+
+const getFieldSelectComboBox = (wrapper: ReactWrapper) =>
+  wrapper
+    .find(EuiComboBox)
+    .filter('[data-test-subj="indexPattern-dimension-field"]') as ReactWrapper<
+    EuiComboBoxProps<string | number | string[] | undefined>
+  >;
 
 const fields = [
   {
@@ -159,7 +167,7 @@ const bytesColumn: GenericIndexPatternColumn = {
 
 const services = coreMock.createStart() as unknown as LensAppServices;
 
-function mountWithServices(component: React.ReactElement) {
+function mountWithServices(component: React.ReactElement): ReactWrapper {
   return mount(component, {
     // This is an elegant way to wrap a component in Enzyme
     // preserving the root at the component level rather than
@@ -295,9 +303,7 @@ describe('FormBasedDimensionEditor', () => {
   it('should show field select', () => {
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-    expect(
-      wrapper.find(EuiComboBox).filter('[data-test-subj="indexPattern-dimension-field"]')
-    ).toHaveLength(1);
+    expect(getFieldSelectComboBox(wrapper)).toHaveLength(1);
   });
 
   it('should not show field select on fieldless operation', () => {
@@ -318,9 +324,7 @@ describe('FormBasedDimensionEditor', () => {
       />
     );
 
-    expect(
-      wrapper.find(EuiComboBox).filter('[data-test-subj="indexPattern-dimension-field"]')
-    ).toHaveLength(0);
+    expect(getFieldSelectComboBox(wrapper)).toHaveLength(0);
   });
 
   it('should not show any choices if the filter returns false', () => {
@@ -332,21 +336,13 @@ describe('FormBasedDimensionEditor', () => {
       />
     );
 
-    expect(
-      wrapper
-        .find(EuiComboBox)
-        .filter('[data-test-subj="indexPattern-dimension-field"]')!
-        .prop('options')!
-    ).toHaveLength(0);
+    expect(getFieldSelectComboBox(wrapper).prop('options')!).toHaveLength(0);
   });
 
   it('should list all field names and document as a whole in prioritized order', () => {
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-    const options = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')
-      .prop('options');
+    const options = getFieldSelectComboBox(wrapper).prop('options');
 
     expect(options).toHaveLength(3);
 
@@ -375,11 +371,7 @@ describe('FormBasedDimensionEditor', () => {
 
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-    const options = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')
-      .prop('options');
-
+    const options = getFieldSelectComboBox(wrapper).prop('options');
     expect(options![1].options!.map(({ label }) => label)).toEqual(['timestampLabel', 'source']);
   });
 
@@ -391,10 +383,7 @@ describe('FormBasedDimensionEditor', () => {
       />
     );
 
-    const options = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')
-      .prop('options');
+    const options = getFieldSelectComboBox(wrapper).prop('options');
 
     expect(options![0]['data-test-subj']).toEqual('lns-fieldOptionIncompatible-___records___');
 
@@ -547,20 +536,18 @@ describe('FormBasedDimensionEditor', () => {
     );
   });
 
-  it('should keep the operation when switching to another field compatible with this operation', () => {
+  it('should keep the operation when switching to another field compatible with this operation', async () => {
     const initialState: FormBasedPrivateState = getStateWithColumns({ col1: bytesColumn });
 
     wrapper = mountWithServices(
       <FormBasedDimensionEditorComponent {...defaultProps} state={initialState} />
     );
 
-    const comboBox = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')!;
+    const comboBox = getFieldSelectComboBox(wrapper);
     const option = comboBox.prop('options')![1].options!.find(({ label }) => label === 'memory')!;
 
-    act(() => {
-      comboBox.prop('onChange')!([option]);
+    await act(async () => {
+      await comboBox.prop('onChange')!([option]);
     });
 
     expect(setState.mock.calls[0]).toEqual([
@@ -586,16 +573,14 @@ describe('FormBasedDimensionEditor', () => {
     });
   });
 
-  it('should switch operations when selecting a field that requires another operation', () => {
+  it('should switch operations when selecting a field that requires another operation', async () => {
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-    const comboBox = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')!;
+    const comboBox = getFieldSelectComboBox(wrapper);
     const option = comboBox.prop('options')![1].options!.find(({ label }) => label === 'source')!;
 
-    act(() => {
-      comboBox.prop('onChange')!([option]);
+    await act(async () => {
+      await comboBox.prop('onChange')!([option]);
     });
 
     expect(setState.mock.calls[0]).toEqual([
@@ -669,7 +654,7 @@ describe('FormBasedDimensionEditor', () => {
 
     act(() => {
       wrapper
-        .find('input[data-test-subj="column-label-edit"]')
+        .find('input[data-test-subj="name-input"]')
         .simulate('change', { target: { value: 'New Label' } });
     });
 
@@ -773,7 +758,7 @@ describe('FormBasedDimensionEditor', () => {
 
     act(() => {
       wrapper
-        .find('input[data-test-subj="column-label-edit"]')
+        .find('input[data-test-subj="name-input"]')
         .simulate('change', { target: { value: 'Sum of bytes' } });
     });
 
@@ -797,11 +782,11 @@ describe('FormBasedDimensionEditor', () => {
   });
 
   describe('transient invalid state', () => {
-    it('should set the state if selecting an operation incompatible with the current field', () => {
+    it('should set the state if selecting an operation incompatible with the current field', async () => {
       wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-      act(() => {
-        wrapper
+      await act(async () => {
+        await wrapper
           .find('button[data-test-subj="lns-indexPatternDimension-terms incompatible"]')
           .simulate('click');
       });
@@ -873,19 +858,14 @@ describe('FormBasedDimensionEditor', () => {
       expect(wrapper.find('[data-test-subj="indexPattern-invalid-operation"]')).toHaveLength(0);
     });
 
-    it('should leave error state when switching from incomplete state to fieldless operation', () => {
-      // @ts-expect-error
-      window['__react-beautiful-dnd-disable-dev-warnings'] = true; // issue with enzyme & react-beautiful-dnd throwing errors: https://github.com/atlassian/react-beautiful-dnd/issues/1593
+    it('should leave error state when switching from incomplete state to fieldless operation', async () => {
       wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-      act(() => {
-        wrapper
+      await act(async () => {
+        await wrapper
           .find('button[data-test-subj="lns-indexPatternDimension-terms incompatible"]')
           .simulate('click');
-      });
-
-      act(() => {
-        wrapper
+        await wrapper
           .find('button[data-test-subj="lns-indexPatternDimension-filters"]')
           .simulate('click');
       });
@@ -925,19 +905,16 @@ describe('FormBasedDimensionEditor', () => {
       expect(wrapper.find('[data-test-subj="indexPattern-invalid-operation"]')).toHaveLength(0);
     });
 
-    it('should indicate fields compatible with selected operation', () => {
+    it('should indicate fields compatible with selected operation', async () => {
       wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-      act(() => {
-        wrapper
+      await act(async () => {
+        await wrapper
           .find('button[data-test-subj="lns-indexPatternDimension-terms incompatible"]')
           .simulate('click');
       });
 
-      const options = wrapper
-        .find(EuiComboBox)
-        .filter('[data-test-subj="indexPattern-dimension-field"]')
-        .prop('options');
+      const options = getFieldSelectComboBox(wrapper).prop('options');
 
       expect(options![0]['data-test-subj']).toContain('Incompatible');
 
@@ -949,13 +926,13 @@ describe('FormBasedDimensionEditor', () => {
       ).not.toContain('Incompatible');
     });
 
-    it('should select compatible operation if field not compatible with selected operation', () => {
+    it('should select compatible operation if field not compatible with selected operation', async () => {
       wrapper = mountWithServices(
         <FormBasedDimensionEditorComponent {...defaultProps} columnId={'col2'} />
       );
 
-      act(() => {
-        wrapper
+      await act(async () => {
+        await wrapper
           .find('button[data-test-subj="lns-indexPatternDimension-average"]')
           .simulate('click');
       });
@@ -964,7 +941,11 @@ describe('FormBasedDimensionEditor', () => {
         expect.any(Function),
         { isDimensionComplete: false },
       ]);
-      expect(setState.mock.calls[0][0](state)).toEqual({
+      let returnedState: FormBasedPrivateState = {} as FormBasedPrivateState;
+      act(() => {
+        returnedState = setState.mock.calls[0][0](state);
+      });
+      expect(returnedState).toEqual({
         ...state,
         layers: {
           first: {
@@ -976,14 +957,12 @@ describe('FormBasedDimensionEditor', () => {
         },
       });
 
-      const comboBox = wrapper
-        .find(EuiComboBox)
-        .filter('[data-test-subj="indexPattern-dimension-field"]');
+      const comboBox = getFieldSelectComboBox(wrapper);
       const options = comboBox.prop('options');
 
       // options[1][2] is a `source` field of type `string` which doesn't support `average` operation
-      act(() => {
-        comboBox.prop('onChange')!([options![1].options![2]]);
+      await act(async () => {
+        await comboBox.prop('onChange')!([options![1].options![2]]);
       });
 
       expect(setState.mock.calls[1][0](state)).toEqual({
@@ -1042,7 +1021,7 @@ describe('FormBasedDimensionEditor', () => {
       });
     });
 
-    it('should select the Records field when count is selected on non-existing column', () => {
+    it('should select the Records field when count is selected on non-existing column', async () => {
       wrapper = mountWithServices(
         <FormBasedDimensionEditorComponent
           {...defaultProps}
@@ -1051,8 +1030,10 @@ describe('FormBasedDimensionEditor', () => {
         />
       );
 
-      act(() => {
-        wrapper.find('button[data-test-subj="lns-indexPatternDimension-count"]').simulate('click');
+      await act(async () => {
+        await wrapper
+          .find('button[data-test-subj="lns-indexPatternDimension-count"]')
+          .simulate('click');
       });
 
       const newColumnState = setState.mock.calls[0][0](state).layers.first.columns.col2;
@@ -1060,7 +1041,7 @@ describe('FormBasedDimensionEditor', () => {
       expect(newColumnState.sourceField).toEqual('___records___');
     });
 
-    it('should indicate document and field compatibility with selected document operation', () => {
+    it('should indicate document and field compatibility with selected document operation', async () => {
       wrapper = mountWithServices(
         <FormBasedDimensionEditorComponent
           {...defaultProps}
@@ -1076,20 +1057,14 @@ describe('FormBasedDimensionEditor', () => {
           columnId="col2"
         />
       );
-
-      act(() => {
-        wrapper
-          .find('button[data-test-subj="lns-indexPatternDimension-terms incompatible"]')
-          .simulate('click');
+      const terms = wrapper.find(
+        'button[data-test-subj="lns-indexPatternDimension-terms incompatible"]'
+      );
+      await act(async () => {
+        await terms.simulate('click');
       });
-
-      const options = wrapper
-        .find(EuiComboBox)
-        .filter('[data-test-subj="indexPattern-dimension-field"]')
-        .prop('options');
-
+      const options = getFieldSelectComboBox(wrapper).prop('options');
       expect(options![0]['data-test-subj']).toContain('Incompatible');
-
       expect(
         options![1].options!.filter(({ label }) => label === 'timestampLabel')[0]['data-test-subj']
       ).toContain('Incompatible');
@@ -1098,24 +1073,18 @@ describe('FormBasedDimensionEditor', () => {
       ).not.toContain('Incompatible');
     });
 
-    it('should set datasource state if compatible field is selected for operation', () => {
+    it('should set datasource state if compatible field is selected for operation', async () => {
       wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
-
-      act(() => {
-        wrapper
+      await act(async () => {
+        await wrapper
           .find('button[data-test-subj="lns-indexPatternDimension-terms incompatible"]')
           .simulate('click');
       });
-
-      const comboBox = wrapper
-        .find(EuiComboBox)
-        .filter('[data-test-subj="indexPattern-dimension-field"]')!;
+      const comboBox = getFieldSelectComboBox(wrapper);
       const option = comboBox.prop('options')![1].options!.find(({ label }) => label === 'source')!;
-
-      act(() => {
-        comboBox.prop('onChange')!([option]);
+      await act(async () => {
+        await comboBox.prop('onChange')!([option]);
       });
-
       expect(setState.mock.calls.length).toEqual(2);
       expect(setState.mock.calls[1]).toEqual([
         expect.any(Function),
@@ -1471,7 +1440,9 @@ describe('FormBasedDimensionEditor', () => {
         timeShift: '1d',
       });
       wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...props} />);
-      wrapper.find(ReducedTimeRange).find(EuiComboBox).prop('onCreateOption')!('7m', []);
+      act(() => {
+        wrapper.find(ReducedTimeRange).find(EuiComboBox).prop('onCreateOption')!('7m', []);
+      });
       expect((props.setState as jest.Mock).mock.calls[0][0](props.state)).toEqual({
         ...props.state,
         layers: {
@@ -1643,7 +1614,9 @@ describe('FormBasedDimensionEditor', () => {
         timeShift: '1d',
       });
       wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...props} />);
-      wrapper.find(TimeShift).find(EuiComboBox).prop('onCreateOption')!('1h', []);
+      act(() => {
+        wrapper.find(TimeShift).find(EuiComboBox).prop('onCreateOption')!('1h', []);
+      });
       expect((props.setState as jest.Mock).mock.calls[0][0](props.state)).toEqual({
         ...props.state,
         layers: {
@@ -1856,15 +1829,21 @@ describe('FormBasedDimensionEditor', () => {
     ]);
   });
 
-  it('should support selecting the operation before the field', () => {
+  it('should support selecting the operation before the field', async () => {
     wrapper = mountWithServices(
       <FormBasedDimensionEditorComponent {...defaultProps} columnId={'col2'} />
     );
-    act(() => {
-      wrapper.find('button[data-test-subj="lns-indexPatternDimension-average"]').simulate('click');
+    await act(async () => {
+      await wrapper
+        .find('button[data-test-subj="lns-indexPatternDimension-average"]')
+        .simulate('click');
     });
     expect(setState.mock.calls[0]).toEqual([expect.any(Function), { isDimensionComplete: false }]);
-    expect(setState.mock.calls[0][0](defaultProps.state)).toEqual({
+    let returnedState: FormBasedPrivateState = {} as FormBasedPrivateState;
+    act(() => {
+      returnedState = setState.mock.calls[0][0](defaultProps.state);
+    });
+    expect(returnedState).toEqual({
       ...state,
       layers: {
         first: {
@@ -1878,13 +1857,11 @@ describe('FormBasedDimensionEditor', () => {
       },
     });
 
-    const comboBox = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]');
+    const comboBox = getFieldSelectComboBox(wrapper);
     const options = comboBox.prop('options');
 
-    act(() => {
-      comboBox.prop('onChange')!([options![1].options![0]]);
+    await act(async () => {
+      await comboBox.prop('onChange')!([options![1].options![0]]);
     });
 
     expect(setState.mock.calls[1][0](defaultProps.state)).toEqual({
@@ -1906,7 +1883,7 @@ describe('FormBasedDimensionEditor', () => {
     });
   });
 
-  it('should select operation directly if only one field is possible', () => {
+  it('should select operation directly if only one field is possible', async () => {
     wrapper = mountWithServices(
       <FormBasedDimensionEditorComponent
         {...defaultProps}
@@ -1921,11 +1898,17 @@ describe('FormBasedDimensionEditor', () => {
         }}
       />
     );
-    act(() => {
-      wrapper.find('button[data-test-subj="lns-indexPatternDimension-average"]').simulate('click');
+    await act(async () => {
+      await wrapper
+        .find('button[data-test-subj="lns-indexPatternDimension-average"]')
+        .simulate('click');
     });
     expect(setState.mock.calls[0]).toEqual([expect.any(Function), { isDimensionComplete: true }]);
-    expect(setState.mock.calls[0][0](state)).toEqual({
+    let returnedState: FormBasedPrivateState = {} as FormBasedPrivateState;
+    act(() => {
+      returnedState = setState.mock.calls[0][0](state);
+    });
+    expect(returnedState).toEqual({
       ...state,
       layers: {
         first: {
@@ -1944,15 +1927,21 @@ describe('FormBasedDimensionEditor', () => {
     });
   });
 
-  it('should select operation directly if only document is possible', () => {
+  it('should select operation directly if only document is possible', async () => {
     wrapper = mountWithServices(
       <FormBasedDimensionEditorComponent {...defaultProps} columnId={'col2'} />
     );
-    act(() => {
-      wrapper.find('button[data-test-subj="lns-indexPatternDimension-count"]').simulate('click');
+    await act(async () => {
+      await wrapper
+        .find('button[data-test-subj="lns-indexPatternDimension-count"]')
+        .simulate('click');
     });
     expect(setState.mock.calls[0]).toEqual([expect.any(Function), { isDimensionComplete: true }]);
-    expect(setState.mock.calls[0][0](state)).toEqual({
+    let returnedState: FormBasedPrivateState = {} as FormBasedPrivateState;
+    act(() => {
+      returnedState = setState.mock.calls[0][0](state);
+    });
+    expect(returnedState).toEqual({
       ...state,
       layers: {
         first: {
@@ -1979,10 +1968,7 @@ describe('FormBasedDimensionEditor', () => {
       wrapper.find('button[data-test-subj="lns-indexPatternDimension-average"]').simulate('click');
     });
 
-    const options = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')
-      .prop('options');
+    const options = getFieldSelectComboBox(wrapper).prop('options');
 
     expect(options![0]['data-test-subj']).toContain('Incompatible');
 
@@ -2014,27 +2000,22 @@ describe('FormBasedDimensionEditor', () => {
       />
     );
 
-    const options = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')
-      .prop('options');
+    const options = getFieldSelectComboBox(wrapper).prop('options');
 
     expect(options![0]['data-test-subj']).not.toContain('Incompatible');
   });
 
-  it('should not update when selecting the current field again', () => {
+  it('should not update when selecting the current field again', async () => {
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
-    const comboBox = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]');
+    const comboBox = getFieldSelectComboBox(wrapper);
 
     const option = comboBox
       .prop('options')![1]
       .options!.find(({ label }) => label === 'timestampLabel')!;
 
-    act(() => {
-      comboBox.prop('onChange')!([option]);
+    await act(async () => {
+      await comboBox.prop('onChange')!([option]);
     });
 
     expect(setState).not.toHaveBeenCalled();
@@ -2070,7 +2051,7 @@ describe('FormBasedDimensionEditor', () => {
     ]);
   });
 
-  it('should add a column on selection of a field', () => {
+  it('should add a column on selection of a field', async () => {
     // Prevents field format from being loaded
     setState.mockImplementation(() => {});
 
@@ -2078,20 +2059,23 @@ describe('FormBasedDimensionEditor', () => {
       <FormBasedDimensionEditorComponent {...defaultProps} columnId={'col2'} />
     );
 
-    const comboBox = wrapper
-      .find(EuiComboBox)
-      .filter('[data-test-subj="indexPattern-dimension-field"]')!;
+    const comboBox = getFieldSelectComboBox(wrapper);
     const option = comboBox.prop('options')![1].options![0];
 
-    act(() => {
-      comboBox.prop('onChange')!([option]);
+    await act(async () => {
+      await comboBox.prop('onChange')!([option]);
     });
 
     expect(setState.mock.calls[0]).toEqual([
       expect.any(Function),
       { isDimensionComplete: true, forceRender: false },
     ]);
-    expect(setState.mock.calls[0][0](defaultProps.state)).toEqual({
+    let returnedState: FormBasedPrivateState | null = null;
+    act(() => {
+      returnedState = setState.mock.calls[0][0](defaultProps.state);
+    });
+
+    expect(returnedState).toEqual({
       ...state,
       layers: {
         first: {
@@ -2135,12 +2119,8 @@ describe('FormBasedDimensionEditor', () => {
 
   it('should keep the latest valid dimension when removing the selection in field combobox', () => {
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
-
     act(() => {
-      wrapper
-        .find(EuiComboBox)
-        .filter('[data-test-subj="indexPattern-dimension-field"]')
-        .prop('onChange')!([]);
+      getFieldSelectComboBox(wrapper as ReactWrapper).prop('onChange')!([]);
     });
 
     expect(setState).not.toHaveBeenCalled();
@@ -2273,14 +2253,14 @@ describe('FormBasedDimensionEditor', () => {
     });
   });
 
-  it('should hide the top level field selector when switching from non-reference to reference', () => {
+  it('should hide the top level field selector when switching from non-reference to reference', async () => {
     (generateId as jest.Mock).mockReturnValue(`second`);
     wrapper = mountWithServices(<FormBasedDimensionEditorComponent {...defaultProps} />);
 
     expect(wrapper.find('ReferenceEditor')).toHaveLength(0);
 
-    act(() => {
-      wrapper
+    await act(async () => {
+      await wrapper
         .find('button[data-test-subj="lns-indexPatternDimension-differences incompatible"]')
         .simulate('click');
     });

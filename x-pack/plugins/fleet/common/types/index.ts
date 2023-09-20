@@ -47,8 +47,13 @@ export interface FleetConfigType {
   };
   internal?: {
     disableILMPolicies: boolean;
+    disableProxies: boolean;
     fleetServerStandalone: boolean;
+    onlyAllowAgentUpgradeToKnownVersions: boolean;
+    activeAgentsSoftLimit?: number;
+    capabilities: string[];
   };
+  createArtifactsBulkBatchSize?: number;
 }
 
 // Calling Object.entries(PackagesGroupedByStatus) gave `status: string`

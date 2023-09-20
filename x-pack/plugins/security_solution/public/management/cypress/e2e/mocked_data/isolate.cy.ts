@@ -24,11 +24,12 @@ import type { ReturnTypeFromChainable } from '../../types';
 import { addAlertsToCase } from '../../tasks/add_alerts_to_case';
 import { APP_ALERTS_PATH, APP_CASES_PATH, APP_PATH } from '../../../../../common/constants';
 import { login } from '../../tasks/login';
+import { disableExpandableFlyoutAdvancedSettings, loadPage } from '../../tasks/common';
 import { indexNewCase } from '../../tasks/index_new_case';
 import { indexEndpointHosts } from '../../tasks/index_endpoint_hosts';
 import { indexEndpointRuleAlerts } from '../../tasks/index_endpoint_rule_alerts';
 
-describe('Isolate command', () => {
+describe('Isolate command', { tags: '@ess' }, () => {
   describe('from Manage', () => {
     let endpointData: ReturnTypeFromChainable<typeof indexEndpointHosts> | undefined;
     let isolatedEndpointData: ReturnTypeFromChainable<typeof indexEndpointHosts> | undefined;
@@ -78,7 +79,7 @@ describe('Isolate command', () => {
     });
 
     it('should allow filtering endpoint by Isolated status', () => {
-      cy.visit(APP_PATH + getEndpointListPath({ name: 'endpointList' }));
+      loadPage(APP_PATH + getEndpointListPath({ name: 'endpointList' }));
       closeAllToasts();
       filterOutIsolatedHosts();
       isolatedEndpointHostnames.forEach(checkEndpointIsIsolated);
@@ -88,12 +89,13 @@ describe('Isolate command', () => {
     });
   });
 
-  describe('from Alerts', () => {
+  describe.skip('from Alerts', () => {
     let endpointData: ReturnTypeFromChainable<typeof indexEndpointHosts> | undefined;
     let alertData: ReturnTypeFromChainable<typeof indexEndpointRuleAlerts> | undefined;
     let hostname: string;
 
     before(() => {
+      disableExpandableFlyoutAdvancedSettings();
       indexEndpointHosts({ withResponseActions: false, isolation: false }).then(
         (indexEndpoints) => {
           endpointData = indexEndpoints;
@@ -130,7 +132,7 @@ describe('Isolate command', () => {
       let isolateRequestResponse: ActionDetails;
       let releaseRequestResponse: ActionDetails;
 
-      cy.visit(APP_ALERTS_PATH);
+      loadPage(APP_ALERTS_PATH);
       closeAllToasts();
 
       cy.getByTestSubj('alertsTable').within(() => {
@@ -163,6 +165,7 @@ describe('Isolate command', () => {
       cy.contains(`Isolation on host ${hostname} successfully submitted`);
 
       cy.getByTestSubj('euiFlyoutCloseButton').click();
+      // eslint-disable-next-line cypress/no-unnecessary-waiting
       cy.wait(1000);
       openAlertDetails();
 
@@ -256,7 +259,7 @@ describe('Isolate command', () => {
       const releaseComment = `Releasing ${hostname}`;
       const caseAlertId = caseAlertActions.comments[alertId];
 
-      cy.visit(caseUrlPath);
+      loadPage(caseUrlPath);
       closeAllToasts();
       openCaseAlertDetails(caseAlertId);
 

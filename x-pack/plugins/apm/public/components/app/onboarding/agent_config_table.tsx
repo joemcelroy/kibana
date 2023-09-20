@@ -13,9 +13,10 @@ import {
   EuiText,
   EuiBasicTableColumn,
   EuiButton,
+  EuiButtonIcon,
+  copyToClipboard,
 } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
-
 function ConfigurationValueColumn({
   columnKey,
   value,
@@ -46,9 +47,25 @@ function ConfigurationValueColumn({
   }
 
   return (
-    <EuiText size="s" color="accent">
-      {value}
-    </EuiText>
+    <>
+      <EuiText size="s" color="accent">
+        {value}
+      </EuiText>
+      {value && (
+        <EuiButtonIcon
+          data-test-subj="apmConfigurationValueColumnButton"
+          aria-label={i18n.translate(
+            'xpack.apm.onboarding.column.value.copyIconText',
+            {
+              defaultMessage: 'Copy to clipboard',
+            }
+          )}
+          color="text"
+          iconType="copy"
+          onClick={() => copyToClipboard(value)}
+        />
+      )}
+    </>
   );
 }
 

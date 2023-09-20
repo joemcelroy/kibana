@@ -35,10 +35,11 @@ import {
   OptionsListEmbeddableInput,
 } from '../..';
 import { pluginServices } from '../../services';
-import { MIN_OPTIONS_LIST_REQUEST_SIZE, OptionsListReduxState } from '../types';
+import { IClearableControl } from '../../types';
 import { OptionsListControl } from '../components/options_list_control';
 import { ControlsDataViewsService } from '../../services/data_views/types';
 import { ControlsOptionsListService } from '../../services/options_list/types';
+import { MIN_OPTIONS_LIST_REQUEST_SIZE, OptionsListReduxState } from '../types';
 import { getDefaultComponentState, optionsListReducers } from '../options_list_reducers';
 
 const diffDataFetchProps = (
@@ -76,7 +77,10 @@ type OptionsListReduxEmbeddableTools = ReduxEmbeddableTools<
   typeof optionsListReducers
 >;
 
-export class OptionsListEmbeddable extends Embeddable<OptionsListEmbeddableInput, ControlOutput> {
+export class OptionsListEmbeddable
+  extends Embeddable<OptionsListEmbeddableInput, ControlOutput>
+  implements IClearableControl
+{
   public readonly type = OPTIONS_LIST_CONTROL;
   public deferEmbeddableLoad = true;
 
@@ -241,13 +245,6 @@ export class OptionsListEmbeddable extends Embeddable<OptionsListEmbeddableInput
     if (!this.dataView || this.dataView.id !== dataViewId) {
       try {
         this.dataView = await this.dataViewsService.get(dataViewId);
-        if (!this.dataView)
-          throw new Error(
-            i18n.translate('controls.optionsList.errors.dataViewNotFound', {
-              defaultMessage: 'Could not locate data view: {dataViewId}',
-              values: { dataViewId },
-            })
-          );
       } catch (e) {
         this.dispatch.setErrorMessage(e.message);
       }
@@ -256,25 +253,21 @@ export class OptionsListEmbeddable extends Embeddable<OptionsListEmbeddableInput
     }
 
     if (this.dataView && (!this.field || this.field.name !== fieldName)) {
-      try {
-        const originalField = this.dataView.getFieldByName(fieldName);
-        if (!originalField) {
-          throw new Error(
-            i18n.translate('controls.optionsList.errors.fieldNotFound', {
-              defaultMessage: 'Could not locate field: {fieldName}',
-              values: { fieldName },
-            })
-          );
-        }
-
-        this.field = originalField.toSpec();
-      } catch (e) {
-        this.dispatch.setErrorMessage(e.message);
+      const field = this.dataView.getFieldByName(fieldName);
+      if (field) {
+        this.field = field.toSpec();
+        this.dispatch.setField(this.field);
+      } else {
+        this.dispatch.setErrorMessage(
+          i18n.translate('controls.optionsList.errors.fieldNotFound', {
+            defaultMessage: 'Could not locate field: {fieldName}',
+            values: { fieldName },
+          })
+        );
       }
-      this.dispatch.setField(this.field);
     }
 
-    return { dataView: this.dataView, field: this.field! };
+    return { dataView: this.dataView, field: this.field };
   };
 
   private runOptionsListQuery = async (size: number = MIN_OPTIONS_LIST_REQUEST_SIZE) => {
@@ -410,6 +403,10 @@ export class OptionsListEmbeddable extends Embeddable<OptionsListEmbeddableInput
     if (exclude) newFilter.meta.negate = true;
     return [newFilter];
   };
+
+  public clearSelections() {
+    this.dispatch.clearSelections({});
+  }
 
   reload = () => {
     // clear cache when reload is requested

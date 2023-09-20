@@ -66,6 +66,22 @@
             "path": "src/core/public/index.ts"
           },
           {
+            "plugin": "cases",
+            "path": "x-pack/plugins/cases/common/ui/types.ts"
+          },
+          {
+            "plugin": "cases",
+            "path": "x-pack/plugins/cases/common/ui/types.ts"
+          },
+          {
+            "plugin": "cases",
+            "path": "x-pack/plugins/cases/common/ui/types.ts"
+          },
+          {
+            "plugin": "cases",
+            "path": "x-pack/plugins/cases/common/ui/types.ts"
+          },
+          {
             "plugin": "spaces",
             "path": "x-pack/plugins/spaces/public/legacy_urls/types.ts"
           },
@@ -120,22 +136,6 @@
           {
             "plugin": "lens",
             "path": "x-pack/plugins/lens/public/types.ts"
-          },
-          {
-            "plugin": "cases",
-            "path": "x-pack/plugins/cases/common/ui/types.ts"
-          },
-          {
-            "plugin": "cases",
-            "path": "x-pack/plugins/cases/common/ui/types.ts"
-          },
-          {
-            "plugin": "cases",
-            "path": "x-pack/plugins/cases/common/ui/types.ts"
-          },
-          {
-            "plugin": "cases",
-            "path": "x-pack/plugins/cases/common/ui/types.ts"
           },
           {
             "plugin": "maps",
@@ -903,22 +903,6 @@
             "path": "src/core/public/index.ts"
           },
           {
-            "plugin": "dataViews",
-            "path": "src/plugins/data_views/common/lib/get_title.ts"
-          },
-          {
-            "plugin": "dataViews",
-            "path": "src/plugins/data_views/common/lib/get_title.ts"
-          },
-          {
-            "plugin": "dataViews",
-            "path": "src/plugins/data_views/public/saved_objects_client_wrapper.ts"
-          },
-          {
-            "plugin": "dataViews",
-            "path": "src/plugins/data_views/public/saved_objects_client_wrapper.ts"
-          },
-          {
             "plugin": "home",
             "path": "src/plugins/home/public/application/kibana_services.ts"
           },
@@ -969,38 +953,6 @@
           {
             "plugin": "visualizations",
             "path": "src/plugins/visualizations/public/plugin.ts"
-          },
-          {
-            "plugin": "eventAnnotation",
-            "path": "src/plugins/event_annotation/public/event_annotation_service/service.tsx"
-          },
-          {
-            "plugin": "eventAnnotation",
-            "path": "src/plugins/event_annotation/public/event_annotation_service/service.tsx"
-          },
-          {
-            "plugin": "ml",
-            "path": "x-pack/plugins/ml/public/application/util/dependency_cache.ts"
-          },
-          {
-            "plugin": "ml",
-            "path": "x-pack/plugins/ml/public/application/util/dependency_cache.ts"
-          },
-          {
-            "plugin": "ml",
-            "path": "x-pack/plugins/ml/public/application/services/dashboard_service.ts"
-          },
-          {
-            "plugin": "ml",
-            "path": "x-pack/plugins/ml/public/application/services/dashboard_service.ts"
-          },
-          {
-            "plugin": "canvas",
-            "path": "x-pack/plugins/canvas/public/services/platform.ts"
-          },
-          {
-            "plugin": "canvas",
-            "path": "x-pack/plugins/canvas/public/services/platform.ts"
           },
           {
             "plugin": "lens",
@@ -1103,10 +1055,6 @@
                 "path": "packages/core/saved-objects/core-saved-objects-browser-internal/src/simple_saved_object.ts"
               },
               {
-                "plugin": "@kbn/core-saved-objects-browser-mocks",
-                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
-              },
-              {
                 "plugin": "savedObjects",
                 "path": "src/plugins/saved_objects/public/saved_object/helpers/create_source.ts"
               },
@@ -1127,20 +1075,8 @@
                 "path": "src/plugins/saved_objects/public/saved_object/helpers/save_with_confirmation.ts"
               },
               {
-                "plugin": "dashboard",
-                "path": "src/plugins/dashboard/public/dashboard_actions/clone_panel_action.tsx"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.tsx"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.test.ts"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.test.ts"
+                "plugin": "@kbn/core-saved-objects-browser-mocks",
+                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
               },
               {
                 "plugin": "savedObjects",
@@ -1334,16 +1270,12 @@
             "trackAdoption": false,
             "references": [
               {
-                "plugin": "@kbn/core-saved-objects-browser-mocks",
-                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
-              },
-              {
                 "plugin": "home",
                 "path": "src/plugins/home/public/application/components/home_app.js"
               },
               {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.test.ts"
+                "plugin": "@kbn/core-saved-objects-browser-mocks",
+                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
               },
               {
                 "plugin": "@kbn/core-saved-objects-browser-internal",
@@ -1447,16 +1379,16 @@
                 "path": "packages/core/saved-objects/core-saved-objects-browser-internal/src/simple_saved_object.ts"
               },
               {
-                "plugin": "@kbn/core-saved-objects-browser-mocks",
-                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
-              },
-              {
                 "plugin": "savedObjects",
                 "path": "src/plugins/saved_objects/public/saved_object/helpers/build_saved_object.ts"
               },
               {
                 "plugin": "visualizations",
                 "path": "src/plugins/visualizations/public/visualize_app/components/visualize_listing.tsx"
+              },
+              {
+                "plugin": "@kbn/core-saved-objects-browser-mocks",
+                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
               },
               {
                 "plugin": "@kbn/core-saved-objects-browser-internal",
@@ -1692,10 +1624,6 @@
             "trackAdoption": false,
             "references": [
               {
-                "plugin": "@kbn/core-saved-objects-browser-mocks",
-                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
-              },
-              {
                 "plugin": "savedObjects",
                 "path": "src/plugins/saved_objects/public/saved_object/helpers/find_object_by_title.ts"
               },
@@ -1704,28 +1632,12 @@
                 "path": "src/plugins/presentation_util/public/services/dashboards/dashboards_service.ts"
               },
               {
-                "plugin": "dashboard",
-                "path": "src/plugins/dashboard/public/dashboard_actions/clone_panel_action.tsx"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.tsx"
-              },
-              {
-                "plugin": "ml",
-                "path": "x-pack/plugins/ml/public/application/jobs/new_job/recognize/resolvers.ts"
-              },
-              {
-                "plugin": "ml",
-                "path": "x-pack/plugins/ml/public/application/services/dashboard_service.ts"
+                "plugin": "@kbn/core-saved-objects-browser-mocks",
+                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
               },
               {
                 "plugin": "dashboardEnhanced",
                 "path": "x-pack/plugins/dashboard_enhanced/public/services/drilldowns/abstract_dashboard_drilldown/components/collect_config_container.tsx"
-              },
-              {
-                "plugin": "ml",
-                "path": "x-pack/plugins/ml/public/application/services/dashboard_service.test.ts"
               },
               {
                 "plugin": "savedObjects",
@@ -1812,44 +1724,16 @@
             "trackAdoption": false,
             "references": [
               {
-                "plugin": "@kbn/core-saved-objects-browser-mocks",
-                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
-              },
-              {
-                "plugin": "dataViews",
-                "path": "src/plugins/data_views/common/lib/get_title.ts"
-              },
-              {
                 "plugin": "savedObjects",
                 "path": "src/plugins/saved_objects/public/saved_object/helpers/initialize_saved_object.ts"
               },
               {
-                "plugin": "dashboard",
-                "path": "src/plugins/dashboard/public/dashboard_actions/clone_panel_action.tsx"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.tsx"
-              },
-              {
-                "plugin": "ml",
-                "path": "x-pack/plugins/ml/public/application/components/custom_urls/custom_url_editor/utils.ts"
-              },
-              {
-                "plugin": "ml",
-                "path": "x-pack/plugins/ml/public/application/jobs/new_job/job_from_lens/route_resolver.ts"
+                "plugin": "@kbn/core-saved-objects-browser-mocks",
+                "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
               },
               {
                 "plugin": "dashboardEnhanced",
                 "path": "x-pack/plugins/dashboard_enhanced/public/services/drilldowns/abstract_dashboard_drilldown/components/collect_config_container.tsx"
-              },
-              {
-                "plugin": "monitoring",
-                "path": "x-pack/plugins/monitoring/public/application/pages/elasticsearch/ingest_pipeline_modal.tsx"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.test.ts"
               },
               {
                 "plugin": "savedObjects",
@@ -2081,10 +1965,6 @@
                 "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
               },
               {
-                "plugin": "dataViews",
-                "path": "src/plugins/data_views/public/saved_objects_client_wrapper.ts"
-              },
-              {
                 "plugin": "discover",
                 "path": "src/plugins/discover/public/application/main/services/discover_state.test.ts"
               },
@@ -2301,14 +2181,6 @@
               {
                 "plugin": "@kbn/core-saved-objects-browser-mocks",
                 "path": "packages/core/saved-objects/core-saved-objects-browser-mocks/src/saved_objects_service.mock.ts"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.tsx"
-              },
-              {
-                "plugin": "eventAnnotation",
-                "path": "src/plugins/event_annotation/public/event_annotation_service/service.test.ts"
               },
               {
                 "plugin": "savedObjects",
@@ -3112,18 +2984,6 @@
             "path": "src/plugins/saved_objects/public/saved_object/helpers/find_object_by_title.ts"
           },
           {
-            "plugin": "embeddable",
-            "path": "src/plugins/embeddable/public/lib/panel/panel_header/panel_actions/add_panel/add_panel_flyout.tsx"
-          },
-          {
-            "plugin": "embeddable",
-            "path": "src/plugins/embeddable/public/lib/panel/panel_header/panel_actions/add_panel/add_panel_flyout.tsx"
-          },
-          {
-            "plugin": "embeddable",
-            "path": "src/plugins/embeddable/public/lib/panel/panel_header/panel_actions/add_panel/add_panel_flyout.tsx"
-          },
-          {
             "plugin": "presentationUtil",
             "path": "src/plugins/presentation_util/public/services/dashboards/types.ts"
           },
@@ -3144,12 +3004,12 @@
             "path": "src/plugins/visualizations/public/vis_types/vis_type_alias_registry.ts"
           },
           {
-            "plugin": "aiops",
-            "path": "x-pack/plugins/aiops/public/application/utils/search_utils.ts"
+            "plugin": "dataVisualizer",
+            "path": "x-pack/plugins/data_visualizer/common/types/index.ts"
           },
           {
-            "plugin": "aiops",
-            "path": "x-pack/plugins/aiops/public/application/utils/search_utils.ts"
+            "plugin": "dataVisualizer",
+            "path": "x-pack/plugins/data_visualizer/common/types/index.ts"
           },
           {
             "plugin": "ml",
@@ -3160,12 +3020,12 @@
             "path": "x-pack/plugins/ml/common/types/kibana.ts"
           },
           {
-            "plugin": "dataVisualizer",
-            "path": "x-pack/plugins/data_visualizer/common/types/index.ts"
+            "plugin": "aiops",
+            "path": "x-pack/plugins/aiops/public/application/utils/search_utils.ts"
           },
           {
-            "plugin": "dataVisualizer",
-            "path": "x-pack/plugins/data_visualizer/common/types/index.ts"
+            "plugin": "aiops",
+            "path": "x-pack/plugins/aiops/public/application/utils/search_utils.ts"
           },
           {
             "plugin": "dashboardEnhanced",
@@ -3182,14 +3042,6 @@
           {
             "plugin": "graph",
             "path": "x-pack/plugins/graph/public/types/app_state.ts"
-          },
-          {
-            "plugin": "synthetics",
-            "path": "x-pack/plugins/synthetics/common/types/synthetics_monitor.ts"
-          },
-          {
-            "plugin": "synthetics",
-            "path": "x-pack/plugins/synthetics/common/types/synthetics_monitor.ts"
           },
           {
             "plugin": "graph",
@@ -3771,7 +3623,7 @@
         "signature": [
           "{ type: string | string[]; search?: string | undefined; page?: number | undefined; filter?: any; aggs?: Record<string, ",
           "AggregationsAggregationContainer",
-          "> | undefined; namespaces?: string[] | undefined; fields?: string[] | undefined; sortField?: string | undefined; preference?: string | undefined; perPage?: number | undefined; defaultSearchOperator?: \"AND\" | \"OR\" | undefined; searchFields?: string[] | undefined; hasReference?: ",
+          "> | undefined; namespaces?: string[] | undefined; perPage?: number | undefined; fields?: string[] | undefined; defaultSearchOperator?: \"AND\" | \"OR\" | undefined; searchFields?: string[] | undefined; hasReference?: ",
           {
             "pluginId": "@kbn/core-saved-objects-api-server",
             "scope": "common",
@@ -3787,7 +3639,7 @@
             "section": "def-common.SavedObjectsFindOptionsReference",
             "text": "SavedObjectsFindOptionsReference"
           },
-          "[] | undefined; hasReferenceOperator?: \"AND\" | \"OR\" | undefined; hasNoReference?: ",
+          "[] | undefined; sortField?: string | undefined; preference?: string | undefined; hasReferenceOperator?: \"AND\" | \"OR\" | undefined; hasNoReference?: ",
           {
             "pluginId": "@kbn/core-saved-objects-api-server",
             "scope": "common",

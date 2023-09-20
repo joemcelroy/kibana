@@ -9,6 +9,7 @@
     "browser": true,
     "configPath": ["xpack", "infra"],
     "requiredPlugins": [
+      "aiops",
       "alerting",
       "cases",
       "charts",
@@ -17,8 +18,12 @@
       "discover",
       "embeddable",
       "features",
+      "fieldFormats",
       "lens",
+      "logsShared",
+      "metricsDataAccess",
       "observability",
+      "observabilityAIAssistant",
       "observabilityShared",
       "ruleRegistry",
       "security",
@@ -33,6 +38,7 @@
     "requiredBundles": [
       "unifiedSearch",
       "observability",
+      "observabilityAIAssistant",
       "licenseManagement",
       "kibanaUtils",
       "kibanaReact",

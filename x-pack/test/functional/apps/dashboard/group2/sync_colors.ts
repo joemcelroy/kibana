@@ -34,6 +34,7 @@ export default function ({ getService, getPageObjects }: FtrProviderContext) {
 
     return colorMapping;
   }
+
   describe('sync colors', function () {
     before(async function () {
       await esArchiver.loadIfNeeded('x-pack/test/functional/es_archives/logstash_functional');
@@ -51,7 +52,7 @@ export default function ({ getService, getPageObjects }: FtrProviderContext) {
     });
 
     it('should sync colors on dashboard by default', async function () {
-      await PageObjects.common.navigateToApp('dashboard');
+      await PageObjects.dashboard.navigateToApp();
       await elasticChart.setNewChartUiDebugFlag(true);
       await PageObjects.dashboard.clickCreateDashboardPrompt();
       await dashboardAddPanel.clickCreateNewLink();

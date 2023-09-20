@@ -127,12 +127,16 @@ export class LegacyAlertsClient<
     return this.trackedAlerts;
   }
 
+  public getAlert(id: string) {
+    return this.alertFactory?.get(id);
+  }
+
   public processAndLogAlerts({
     eventLogger,
     ruleRunMetricsStore,
     shouldLogAlerts,
     flappingSettings,
-    notifyWhen,
+    notifyOnActionGroupChange,
     maintenanceWindowIds,
   }: ProcessAndLogAlertsOpts) {
     const {
@@ -159,7 +163,7 @@ export class LegacyAlertsClient<
 
     const alerts = getAlertsForNotification<State, Context, ActionGroupIds, RecoveryActionGroupId>(
       flappingSettings,
-      notifyWhen,
+      notifyOnActionGroupChange,
       this.options.ruleType.defaultActionGroupId,
       processedAlertsNew,
       processedAlertsActive,

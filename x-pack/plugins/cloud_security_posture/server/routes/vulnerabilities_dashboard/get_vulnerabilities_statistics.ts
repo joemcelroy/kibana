@@ -5,9 +5,12 @@
  * 2.0.
  */
 
-import { QueryDslQueryContainer, SearchRequest } from '@elastic/elasticsearch/lib/api/types';
+import { SearchRequest } from '@elastic/elasticsearch/lib/api/types';
 import { ElasticsearchClient } from '@kbn/core-elasticsearch-server';
-import { LATEST_VULNERABILITIES_INDEX_DEFAULT_NS } from '../../../common/constants';
+import {
+  LATEST_VULNERABILITIES_INDEX_DEFAULT_NS,
+  VULNERABILITIES_SEVERITY,
+} from '../../../common/constants';
 
 export interface VulnerabilitiesStatisticsQueryResult {
   critical: {
@@ -27,21 +30,21 @@ export interface VulnerabilitiesStatisticsQueryResult {
   };
 }
 
-export const getVulnerabilitiesStatisticsQuery = (
-  query: QueryDslQueryContainer
-): SearchRequest => ({
+export const getVulnerabilitiesStatisticsQuery = (): SearchRequest => ({
   size: 0,
-  query,
+  query: {
+    match_all: {},
+  },
   index: LATEST_VULNERABILITIES_INDEX_DEFAULT_NS,
   aggs: {
     critical: {
-      filter: { term: { 'vulnerability.severity': 'CRITICAL' } },
+      filter: { term: { 'vulnerability.severity': VULNERABILITIES_SEVERITY.CRITICAL } },
     },
     high: {
-      filter: { term: { 'vulnerability.severity': 'HIGH' } },
+      filter: { term: { 'vulnerability.severity': VULNERABILITIES_SEVERITY.HIGH } },
     },
     medium: {
-      filter: { term: { 'vulnerability.severity': 'MEDIUM' } },
+      filter: { term: { 'vulnerability.severity': VULNERABILITIES_SEVERITY.MEDIUM } },
     },
     resources_scanned: {
       cardinality: {
@@ -56,12 +59,9 @@ export const getVulnerabilitiesStatisticsQuery = (
   },
 });
 
-export const getVulnerabilitiesStatistics = async (
-  esClient: ElasticsearchClient,
-  query: QueryDslQueryContainer
-) => {
+export const getVulnerabilitiesStatistics = async (esClient: ElasticsearchClient) => {
   const queryResult = await esClient.search<unknown, VulnerabilitiesStatisticsQueryResult>(
-    getVulnerabilitiesStatisticsQuery(query)
+    getVulnerabilitiesStatisticsQuery()
   );
 
   return {

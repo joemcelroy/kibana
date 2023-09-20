@@ -253,7 +253,6 @@ exports[`TelemetryManagementSectionComponent renders null because allowChangingO
       "timeZone": null,
     }
   }
-  onQueryMatchChange={[MockFunction]}
   showAppliesSettingMessage={true}
   telemetryService={
     TelemetryService {
@@ -261,6 +260,7 @@ exports[`TelemetryManagementSectionComponent renders null because allowChangingO
       "currentKibanaVersion": "mock_kibana_version",
       "defaultConfig": Object {
         "allowChangingOptInStatus": false,
+        "appendServerlessChannelsSuffix": false,
         "banner": true,
         "labels": Object {},
         "optIn": true,

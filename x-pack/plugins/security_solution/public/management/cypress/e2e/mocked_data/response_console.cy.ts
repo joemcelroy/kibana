@@ -24,7 +24,7 @@ import {
 } from '../../tasks/isolate';
 import { login } from '../../tasks/login';
 
-describe('Response console', () => {
+describe('Response console', { tags: '@ess' }, () => {
   beforeEach(() => {
     login();
   });
@@ -228,7 +228,8 @@ describe('Response console', () => {
     });
   });
 
-  describe('`get-file` command', () => {
+  // Broken until this is fixed: https://github.com/elastic/kibana/issues/162760
+  describe.skip('`get-file` command', () => {
     let endpointData: ReturnTypeFromChainable<typeof indexEndpointHosts>;
     let endpointHostname: string;
     let getFileRequestResponse: ActionDetails;

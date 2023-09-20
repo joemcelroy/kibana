@@ -6,20 +6,43 @@
  */
 
 import { i18n } from '@kbn/i18n';
-import { FlyoutTabIds, type Tab } from '../../../../../components/asset_details/types';
+import { ContentTabIds, type Tab } from '../../../../../components/asset_details/types';
 
-export const processesTab: Tab = {
-  id: FlyoutTabIds.PROCESSES,
-  name: i18n.translate('xpack.infra.metrics.nodeDetails.tabs.processes', {
-    defaultMessage: 'Processes',
-  }),
-  'data-test-subj': 'hostsView-flyout-tabs-processes',
-};
-
-export const metadataTab: Tab = {
-  id: FlyoutTabIds.METADATA,
-  name: i18n.translate('xpack.infra.nodeDetails.tabs.metadata.title', {
-    defaultMessage: 'Metadata',
-  }),
-  'data-test-subj': 'hostsView-flyout-tabs-metadata',
-};
+export const orderedFlyoutTabs: Tab[] = [
+  {
+    id: ContentTabIds.OVERVIEW,
+    name: i18n.translate('xpack.infra.nodeDetails.tabs.overview.title', {
+      defaultMessage: 'Overview',
+    }),
+  },
+  {
+    id: ContentTabIds.METADATA,
+    name: i18n.translate('xpack.infra.nodeDetails.tabs.metadata.title', {
+      defaultMessage: 'Metadata',
+    }),
+  },
+  {
+    id: ContentTabIds.PROCESSES,
+    name: i18n.translate('xpack.infra.metrics.nodeDetails.tabs.processes', {
+      defaultMessage: 'Processes',
+    }),
+  },
+  {
+    id: ContentTabIds.LOGS,
+    name: i18n.translate('xpack.infra.nodeDetails.tabs.logs.title', {
+      defaultMessage: 'Logs',
+    }),
+  },
+  {
+    id: ContentTabIds.ANOMALIES,
+    name: i18n.translate('xpack.infra.nodeDetails.tabs.anomalies', {
+      defaultMessage: 'Anomalies',
+    }),
+  },
+  {
+    id: ContentTabIds.OSQUERY,
+    name: i18n.translate('xpack.infra.nodeDetails.tabs.osquery', {
+      defaultMessage: 'Osquery',
+    }),
+  },
+];

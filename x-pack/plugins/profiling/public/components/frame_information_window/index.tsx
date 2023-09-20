@@ -6,44 +6,42 @@
  */
 import { EuiFlexGroup, EuiFlexItem, EuiText, EuiTitle } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
-import { useCoPilot, CoPilotPrompt } from '@kbn/observability-plugin/public';
-import React, { useMemo } from 'react';
-import { CoPilotPromptId } from '@kbn/observability-plugin/common';
-import { FrameSymbolStatus, getFrameSymbolStatus } from '../../../common/profiling';
+import { FrameSymbolStatus, getFrameSymbolStatus } from '@kbn/profiling-utils';
+import React from 'react';
+import { FrameInformationAIAssistant } from './frame_information_ai_assistant';
 import { FrameInformationPanel } from './frame_information_panel';
 import { getImpactRows } from './get_impact_rows';
 import { getInformationRows } from './get_information_rows';
 import { KeyValueList } from './key_value_list';
 import { MissingSymbolsCallout } from './missing_symbols_callout';
 
-export interface Props {
-  frame?: {
-    fileID: string;
-    frameType: number;
-    exeFileName: string;
-    addressOrLine: number;
-    functionName: string;
-    sourceFileName: string;
-    sourceLine: number;
-    countInclusive: number;
-    countExclusive: number;
-  };
-  totalSamples: number;
-  totalSeconds: number;
+export interface Frame {
+  fileID: string;
+  frameType: number;
+  exeFileName: string;
+  addressOrLine: number;
+  functionName: string;
+  sourceFileName: string;
+  sourceLine: number;
+  countInclusive: number;
+  countExclusive: number;
 }
 
-export function FrameInformationWindow({ frame, totalSamples, totalSeconds }: Props) {
-  const coPilotService = useCoPilot();
+export interface Props {
+  frame?: Frame;
+  totalSamples: number;
+  totalSeconds: number;
+  showAIAssistant?: boolean;
+  showSymbolsStatus?: boolean;
+}
 
-  const promptParams = useMemo(() => {
-    return frame?.functionName && frame?.exeFileName
-      ? {
-          functionName: frame?.functionName,
-          library: frame?.exeFileName,
-        }
-      : undefined;
-  }, [frame?.functionName, frame?.exeFileName]);
-
+export function FrameInformationWindow({
+  frame,
+  totalSamples,
+  totalSeconds,
+  showAIAssistant = true,
+  showSymbolsStatus = true,
+}: Props) {
   if (!frame) {
     return (
       <FrameInformationPanel>
@@ -95,37 +93,18 @@ export function FrameInformationWindow({ frame, totalSamples, totalSeconds }: Pr
     <FrameInformationPanel>
       <EuiFlexGroup direction="column">
         <EuiFlexItem>
-          <KeyValueList rows={informationRows} />
+          <KeyValueList data-test-subj="informationRows" rows={informationRows} />
         </EuiFlexItem>
-        {coPilotService?.isEnabled() && promptParams ? (
-          <>
-            <EuiFlexItem>
-              <CoPilotPrompt
-                coPilot={coPilotService}
-                promptId={CoPilotPromptId.ProfilingExplainFunction}
-                params={promptParams}
-                title={i18n.translate('xpack.profiling.frameInformationWindow.explainFunction', {
-                  defaultMessage: 'Explain function',
-                })}
-              />
-            </EuiFlexItem>
-            <EuiFlexItem>
-              <CoPilotPrompt
-                coPilot={coPilotService}
-                promptId={CoPilotPromptId.ProfilingOptimizeFunction}
-                params={promptParams}
-                title={i18n.translate('xpack.profiling.frameInformationWindow.optimizeFunction', {
-                  defaultMessage: 'Optimize function',
-                })}
-              />
-            </EuiFlexItem>
-          </>
-        ) : undefined}
-        {symbolStatus !== FrameSymbolStatus.SYMBOLIZED && (
+        {showAIAssistant ? (
+          <EuiFlexItem>
+            <FrameInformationAIAssistant frame={frame} />
+          </EuiFlexItem>
+        ) : null}
+        {showSymbolsStatus && symbolStatus !== FrameSymbolStatus.SYMBOLIZED ? (
           <EuiFlexItem>
             <MissingSymbolsCallout frameType={frame.frameType} />
           </EuiFlexItem>
-        )}
+        ) : null}
         <EuiFlexItem>
           <EuiFlexGroup direction="column">
             <EuiFlexItem>
@@ -138,7 +117,7 @@ export function FrameInformationWindow({ frame, totalSamples, totalSeconds }: Pr
               </EuiTitle>
             </EuiFlexItem>
             <EuiFlexItem>
-              <KeyValueList rows={impactRows} />
+              <KeyValueList data-test-subj="impactEstimates" rows={impactRows} />
             </EuiFlexItem>
           </EuiFlexGroup>
         </EuiFlexItem>

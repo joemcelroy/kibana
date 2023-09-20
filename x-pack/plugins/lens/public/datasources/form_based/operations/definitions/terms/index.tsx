@@ -45,6 +45,7 @@ import {
   getFieldsByValidationState,
   isSortableByColumn,
   isPercentileRankSortable,
+  isPercentileSortable,
 } from './helpers';
 import {
   DEFAULT_MAX_DOC_COUNT,
@@ -53,6 +54,7 @@ import {
   supportedTypes,
 } from './constants';
 import { IncludeExcludeRow } from './include_exclude_options';
+import { shouldShowTimeSeriesOption } from '../../../pure_utils';
 
 export function supportsRarityRanking(field?: IndexPatternField) {
   // these es field types can't be sorted by rarity
@@ -183,10 +185,16 @@ export const termsOperation: OperationDefinition<
   getDefaultVisualSettings: (column) => ({
     truncateText: Boolean(!column.params?.secondaryFields?.length),
   }),
-  getPossibleOperationForField: ({ aggregationRestrictions, aggregatable, type }) => {
+  getPossibleOperationForField: ({
+    aggregationRestrictions,
+    aggregatable,
+    type,
+    timeSeriesMetric,
+  }) => {
     if (
       supportedTypes.has(type) &&
       aggregatable &&
+      timeSeriesMetric !== 'counter' &&
       (!aggregationRestrictions || aggregationRestrictions.terms)
     ) {
       return {
@@ -303,7 +311,11 @@ export const termsOperation: OperationDefinition<
       const orderColumn = layer.columns[column.params.orderBy.columnId];
       orderBy = String(orderedColumnIds.indexOf(column.params.orderBy.columnId));
       // percentile rank with non integer value should default to alphabetical order
-      if (!orderColumn || !isPercentileRankSortable(orderColumn)) {
+      if (
+        !orderColumn ||
+        !isPercentileRankSortable(orderColumn) ||
+        !isPercentileSortable(orderColumn)
+      ) {
         orderBy = '_key';
       }
     }
@@ -585,6 +597,12 @@ export const termsOperation: OperationDefinition<
           operationSupportMatrix={operationSupportMatrix}
           onChange={onFieldSelectChange}
           invalidFields={invalidFields}
+          showTimeSeriesDimensions={shouldShowTimeSeriesOption(
+            layer,
+            indexPattern,
+            groupId,
+            dimensionGroups
+          )}
         />
       </EuiFormRow>
     );

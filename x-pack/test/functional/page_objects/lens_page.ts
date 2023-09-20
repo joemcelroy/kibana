@@ -128,7 +128,7 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
       extraFields?: string[];
     }) {
       // type * in the query editor
-      const queryInput = await testSubjects.find('lnsXY-annotation-query-based-query-input');
+      const queryInput = await testSubjects.find('annotation-query-based-query-input');
       await queryInput.type(opts.queryString);
       await testSubjects.click('indexPattern-filters-existingFilterTrigger');
       await this.selectOptionFromComboBox(
@@ -689,6 +689,20 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
         await this.selectOptionFromComboBox(`indexPattern-dimension-field-${lastIndex}`, field);
       });
     },
+    async getNumericFieldReady(testSubj: string) {
+      const numericInput = await find.byCssSelector(
+        `input[data-test-subj="${testSubj}"][type='number']`
+      );
+      await numericInput.click();
+      await numericInput.clearValue();
+      return numericInput;
+    },
+
+    async setTermsNumberOfValues(value: number) {
+      const valuesInput = await this.getNumericFieldReady('indexPattern-terms-values');
+      await valuesInput.type(`${value}`);
+      await PageObjects.common.sleep(500);
+    },
 
     async checkTermsAreNotAvailableToAgg(fields: string[]) {
       const lastIndex = (
@@ -773,7 +787,7 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
     },
 
     async editDimensionLabel(label: string) {
-      await testSubjects.setValue('column-label-edit', label, { clearWithKeyboard: true });
+      await testSubjects.setValue('name-input', label, { clearWithKeyboard: true });
     },
     async editDimensionFormat(format: string, options?: { decimals?: number; prefix?: string }) {
       await this.selectOptionFromComboBox('indexPattern-dimension-format', format);
@@ -1078,6 +1092,11 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
       return el.getVisibleText();
     },
 
+    async getCurrentChartDebugStateForVizType(visType: string) {
+      await this.waitForVisualization(visType);
+      return await elasticChart.getChartDebugData(visType);
+    },
+
     /**
      * Gets text of the specified datatable cell
      *
@@ -1349,15 +1368,14 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
       await dashboardAddPanel.clickCreateNewLink();
       await this.goToTimeRange();
       await this.configureDimension({
-        dimension: 'lnsXY_xDimensionPanel > lns-empty-dimension',
-        operation: 'date_histogram',
-        field: '@timestamp',
-      });
-
-      await this.configureDimension({
         dimension: 'lnsXY_yDimensionPanel > lns-empty-dimension',
         operation: 'average',
         field: 'bytes',
+      });
+      await this.configureDimension({
+        dimension: 'lnsXY_xDimensionPanel > lns-empty-dimension',
+        operation: 'date_histogram',
+        field: '@timestamp',
       });
 
       await this.configureDimension({
@@ -1454,7 +1472,7 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
       }
 
       if (!opts.keepOpen) {
-        await this.closeDimensionEditor();
+        await testSubjects.click('collapseFlyoutButton');
       }
     },
 
@@ -1830,6 +1848,13 @@ export function LensPageProvider({ getService, getPageObjects }: FtrProviderCont
         [void],
         Record<string, { content: string; type: string }> | undefined
       >(() => window.ELASTIC_LENS_CSV_CONTENT);
+    },
+
+    async closeSuggestionPanel() {
+      const isSuggestionPanelOpen = await testSubjects.exists('lnsSuggestionsPanel');
+      if (isSuggestionPanelOpen) {
+        await testSubjects.click('lensSuggestionsPanelToggleButton');
+      }
     },
   });
 }

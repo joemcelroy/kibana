@@ -5,7 +5,12 @@
  * 2.0.
  */
 
-import type { KibanaRequest, Logger } from '@kbn/core/server';
+import type {
+  KibanaRequest,
+  Logger,
+  ElasticsearchClient,
+  SavedObjectsClientContract,
+} from '@kbn/core/server';
 import type { ExceptionListClient, ListsServerExtensionRegistrar } from '@kbn/lists-plugin/server';
 import type { CasesClient, CasesStart } from '@kbn/cases-plugin/server';
 import type { SecurityPluginStart } from '@kbn/security-plugin/server';
@@ -16,6 +21,7 @@ import type {
 } from '@kbn/fleet-plugin/server';
 import type { PluginStartContract as AlertsPluginStartContract } from '@kbn/alerting-plugin/server';
 import type { CloudSetup } from '@kbn/cloud-plugin/server';
+import type { FleetActionsClientInterface } from '@kbn/fleet-plugin/server/services/actions/types';
 import {
   getPackagePolicyCreateCallback,
   getPackagePolicyUpdateCallback,
@@ -41,14 +47,17 @@ import { calculateEndpointAuthz } from '../../common/endpoint/service/authz';
 import type { FeatureUsageService } from './services/feature_usage/service';
 import type { ExperimentalFeatures } from '../../common/experimental_features';
 import type { ActionCreateService } from './services/actions/create/types';
+import type { AppFeaturesService } from '../lib/app_features_service/app_features_service';
 
 export interface EndpointAppContextServiceSetupContract {
   securitySolutionRequestContextFactory: IRequestContextFactory;
+  cloud: CloudSetup;
 }
 
 export interface EndpointAppContextServiceStartContract {
   fleetAuthzService?: FleetStartContract['authz'];
   createFleetFilesClient: FleetStartContract['createFilesClient'];
+  createFleetActionsClient: FleetStartContract['createFleetActionsClient'];
   logger: Logger;
   endpointMetadataService: EndpointMetadataService;
   endpointFleetServicesFactory: EndpointFleetServicesFactoryInterface;
@@ -65,7 +74,9 @@ export interface EndpointAppContextServiceStartContract {
   experimentalFeatures: ExperimentalFeatures;
   messageSigningService: MessageSigningServiceInterface | undefined;
   actionCreateService: ActionCreateService | undefined;
-  cloud: CloudSetup;
+  esClient: ElasticsearchClient;
+  appFeaturesService: AppFeaturesService;
+  savedObjectsClient: SavedObjectsClientContract;
 }
 
 /**
@@ -97,11 +108,13 @@ export class EndpointAppContextService {
         logger,
         manifestManager,
         alerting,
-        cloud,
         licenseService,
         exceptionListsClient,
         featureUsageService,
         endpointMetadataService,
+        esClient,
+        appFeaturesService,
+        savedObjectsClient,
       } = dependencies;
 
       registerIngestCallback(
@@ -113,7 +126,8 @@ export class EndpointAppContextService {
           alerting,
           licenseService,
           exceptionListsClient,
-          cloud
+          this.setupDependencies.cloud,
+          appFeaturesService
         )
       );
 
@@ -129,13 +143,15 @@ export class EndpointAppContextService {
           licenseService,
           featureUsageService,
           endpointMetadataService,
-          cloud
+          this.setupDependencies.cloud,
+          esClient,
+          appFeaturesService
         )
       );
 
       registerIngestCallback(
         'packagePolicyPostDelete',
-        getPackagePolicyDeleteCallback(exceptionListsClient)
+        getPackagePolicyDeleteCallback(exceptionListsClient, savedObjectsClient)
       );
     }
 
@@ -251,5 +267,13 @@ export class EndpointAppContextService {
     }
 
     return this.startDependencies.createFleetFilesClient.fromHost('endpoint');
+  }
+
+  public async getFleetActionsClient(): Promise<FleetActionsClientInterface> {
+    if (!this.startDependencies?.createFleetActionsClient) {
+      throw new EndpointAppContentServicesNotStartedError();
+    }
+
+    return this.startDependencies.createFleetActionsClient('endpoint');
   }
 }

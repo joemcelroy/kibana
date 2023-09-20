@@ -69,7 +69,7 @@ const fleetAgentsRoute = createApmServerRoute({
 });
 
 const saveApmServerSchemaRoute = createApmServerRoute({
-  endpoint: 'POST /api/apm/fleet/apm_server_schema 2023-05-22',
+  endpoint: 'POST /api/apm/fleet/apm_server_schema 2023-10-31',
   options: { tags: ['access:apm', 'access:apm_write'] },
   params: t.type({
     body: t.type({
@@ -111,7 +111,6 @@ const getMigrationCheckRoute = createApmServerRoute({
   options: { tags: ['access:apm'] },
   handler: async (resources): Promise<RunMigrationCheckResponse> => {
     const { core, plugins, context, config, request } = resources;
-
     throwNotFoundIfFleetMigrationNotAvailable(resources.featureFlags);
 
     const { fleet, security } = plugins;
@@ -154,11 +153,13 @@ const createCloudApmPackagePolicyRoute = createApmServerRoute({
       coreStart,
       fleetPluginStart,
       securityPluginStart,
+      apmIndices,
     ] = await Promise.all([
       (await context.core).savedObjects.client,
       resources.core.start(),
       plugins.fleet.start(),
       plugins.security.start(),
+      resources.getApmIndices(),
     ]);
 
     const esClient = coreStart.elasticsearch.client.asScoped(
@@ -175,7 +176,7 @@ const createCloudApmPackagePolicyRoute = createApmServerRoute({
       context,
       request,
       debug: resources.params.query._inspect,
-      config: resources.config,
+      apmIndices,
     });
 
     const cloudApmPackagePolicy = await createCloudApmPackgePolicy({

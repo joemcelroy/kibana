@@ -71,6 +71,16 @@ const mockConfig: ConfigSchema = {
   latestAgentVersionsUrl: '',
   serverlessOnboarding: false,
   managedServiceUrl: '',
+  featureFlags: {
+    agentConfigurationAvailable: true,
+    configurableIndicesAvailable: true,
+    infrastructureTabAvailable: true,
+    infraUiAvailable: true,
+    migrationToFleetAvailable: true,
+    sourcemapApiAvailable: true,
+    storageExplorerAvailable: true,
+  },
+  serverless: { enabled: false },
 };
 
 const urlService = new UrlService({
@@ -89,6 +99,13 @@ const mockPlugin = {
   data: {
     query: {
       timefilter: { timefilter: { setTime: () => {}, getTime: () => ({}) } },
+    },
+  },
+  share: {
+    url: {
+      locators: {
+        get: jest.fn(),
+      },
     },
   },
 };

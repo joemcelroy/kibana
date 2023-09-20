@@ -11,7 +11,7 @@
     ],
     "optionalPlugins": [
       "home",
-      "cloudChatProvider"
+      "serverless"
     ],
     "requiredBundles": [
       "kibanaReact",

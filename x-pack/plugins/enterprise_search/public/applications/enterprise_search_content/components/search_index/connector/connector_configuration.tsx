@@ -26,8 +26,10 @@ import { i18n } from '@kbn/i18n';
 
 import { FormattedMessage } from '@kbn/i18n-react';
 
-import { ConnectorStatus } from '../../../../../../common/types/connectors';
+import { ConnectorStatus } from '@kbn/search-connectors';
+
 import { BetaConnectorCallout } from '../../../../shared/beta/beta_connector_callout';
+import { useCloudDetails } from '../../../../shared/cloud_details/cloud_details';
 import { docLinks } from '../../../../shared/doc_links';
 import { generateEncodedPath } from '../../../../shared/encode_path_params';
 import { EuiButtonTo, EuiLinkTo } from '../../../../shared/react_router_helpers';
@@ -36,6 +38,7 @@ import { GenerateConnectorApiKeyApiLogic } from '../../../api/connector/generate
 import { SEARCH_INDEX_TAB_PATH } from '../../../routes';
 import { isConnectorIndex } from '../../../utils/indices';
 
+import { SyncsContextMenu } from '../components/header_actions/syncs_context_menu';
 import { IndexNameLogic } from '../index_name_logic';
 
 import { IndexViewLogic } from '../index_view_logic';
@@ -44,7 +47,7 @@ import { SearchIndexTabId } from '../search_index';
 import { ApiKeyConfig } from './api_key_configuration';
 import { ConnectorConfigurationConfig } from './connector_configuration_config';
 import { ConnectorNameAndDescription } from './connector_name_and_description/connector_name_and_description';
-import { BETA_CONNECTORS, CONNECTORS } from './constants';
+import { BETA_CONNECTORS, CONNECTORS, getConnectorTemplate } from './constants';
 import { NativeConnectorConfiguration } from './native_connector_configuration/native_connector_configuration';
 
 export const ConnectorConfiguration: React.FC = () => {
@@ -52,6 +55,8 @@ export const ConnectorConfiguration: React.FC = () => {
   const { index, recheckIndexLoading } = useValues(IndexViewLogic);
   const { indexName } = useValues(IndexNameLogic);
   const { recheckIndex } = useActions(IndexViewLogic);
+  const cloudContext = useCloudDetails();
+
   if (!isConnectorIndex(index)) {
     return <></>;
   }
@@ -110,7 +115,7 @@ export const ConnectorConfiguration: React.FC = () => {
                       <EuiText size="s">
                         <FormattedMessage
                           id="xpack.enterpriseSearch.content.indices.configurationConnector.connectorPackage.description.secondParagraph"
-                          defaultMessage="The connectors repository contains several {link}. Use our framework for accelerated development against custom data sources."
+                          defaultMessage="The connectors repository contains several {link}. Use our framework to accelerate developing connectors for custom data sources."
                           values={{
                             link: (
                               <EuiLink
@@ -131,7 +136,7 @@ export const ConnectorConfiguration: React.FC = () => {
                       <EuiText size="s">
                         <FormattedMessage
                           id="xpack.enterpriseSearch.content.indices.configurationConnector.connectorPackage.description.thirdParagraph"
-                          defaultMessage="In this step, you will need to clone or fork the repository, and copy the generated API key and connector ID to the associated {link}. The connector ID will identify this connector to Enterprise Search. The service type will determine which type of data source the connector is configured for."
+                          defaultMessage="In this step, you will need to clone or fork the repository, and copy the generated API key and connector ID to the associated {link}. The connector ID will identify this connector to Search. The service type will determine which type of data source the connector is configured for."
                           values={{
                             link: (
                               <EuiLink
@@ -150,15 +155,14 @@ export const ConnectorConfiguration: React.FC = () => {
                       </EuiText>
                       <EuiSpacer />
                       <EuiCodeBlock fontSize="m" paddingSize="m" color="dark" isCopyable>
-                        {`${
-                          apiKeyData?.encoded
-                            ? `elasticsearch:
-  api_key: "${apiKeyData?.encoded}"
-`
-                            : ''
-                        }connector_id: "${index.connector.id}"
-service_type: "${index.connector.service_type || 'changeme'}"
-`}
+                        {getConnectorTemplate({
+                          apiKeyData,
+                          connectorData: {
+                            id: index.connector.id,
+                            service_type: index.connector.service_type,
+                          },
+                          host: cloudContext.elasticsearchUrl,
+                        })}
                       </EuiCodeBlock>
                       <EuiSpacer />
                       <EuiText size="s">
@@ -166,7 +170,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                           'xpack.enterpriseSearch.content.indices.configurationConnector.connectorPackage.connectorDeployedText',
                           {
                             defaultMessage:
-                              'Once you’ve configured the connector, deploy the connector to your self managed infrastructure.',
+                              'Once configured, deploy the connector on your infrastructure.',
                           }
                         )}
                       </EuiText>
@@ -179,7 +183,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                   title: i18n.translate(
                     'xpack.enterpriseSearch.content.indices.configurationConnector.steps.deployConnector.title',
                     {
-                      defaultMessage: 'Deploy a connector',
+                      defaultMessage: 'Deploy connector',
                     }
                   ),
                   titleSize: 'xs',
@@ -202,7 +206,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                             'xpack.enterpriseSearch.content.indices.configurationConnector.connectorPackage.waitingForConnectorText',
                             {
                               defaultMessage:
-                                'Your connector has not connected to Enterprise Search. Troubleshoot your configuration and refresh the page.',
+                                'Your connector has not connected to Search. Troubleshoot your configuration and refresh the page.',
                             }
                           )}
                           <EuiSpacer size="s" />
@@ -228,7 +232,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                             'xpack.enterpriseSearch.content.indices.configurationConnector.connectorPackage.connectorConnected',
                             {
                               defaultMessage:
-                                'Your connector {name} has connected to Enterprise Search successfully.',
+                                'Your connector {name} has connected to Search successfully.',
                               values: { name: index.connector.name },
                             }
                           )}
@@ -257,7 +261,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                             'xpack.enterpriseSearch.content.indices.configurationConnector.scheduleSync.description',
                             {
                               defaultMessage:
-                                'Once configured, set a recurring sync schedule to keep your documents in sync over time. You can also simply trigger a one-time sync.',
+                                'Finalize your connector by triggering a one-time sync, or setting a recurring sync to keep your data source in sync over time',
                             }
                           )}
                         </EuiText>
@@ -281,6 +285,9 @@ service_type: "${index.connector.service_type || 'changeme'}"
                               )}
                             </EuiButtonTo>
                           </EuiFlexItem>
+                          <EuiFlexItem grow={false}>
+                            <SyncsContextMenu />
+                          </EuiFlexItem>
                         </EuiFlexGroup>
                       </EuiFlexItem>
                     </EuiFlexGroup>
@@ -289,7 +296,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                   title: i18n.translate(
                     'xpack.enterpriseSearch.content.indices.configurationConnector.steps.schedule.title',
                     {
-                      defaultMessage: 'Set a recurring sync schedule',
+                      defaultMessage: 'Advanced configuration',
                     }
                   ),
                   titleSize: 'xs',
@@ -321,7 +328,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                         'xpack.enterpriseSearch.content.indices.configurationConnector.support.description',
                         {
                           defaultMessage:
-                            'Your connector will have to be deployed to your own infrastructure.',
+                            'You need to deploy this connector on your own infrastructure.',
                         }
                       )}
                     </EuiText>
@@ -341,7 +348,7 @@ service_type: "${index.connector.service_type || 'changeme'}"
                       {i18n.translate(
                         'xpack.enterpriseSearch.content.indices.configurationConnector.support.manageKeys.label',
                         {
-                          defaultMessage: 'Manage keys',
+                          defaultMessage: 'Manage API keys',
                         }
                       )}
                     </EuiLinkTo>

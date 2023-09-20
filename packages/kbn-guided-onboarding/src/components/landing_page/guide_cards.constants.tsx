@@ -33,6 +33,30 @@ export interface GuideCardConstants {
 export const guideCards: GuideCardConstants[] = [
   {
     solution: 'search',
+    icon: 'vector',
+    title: i18n.translate('guidedOnboardingPackage.gettingStarted.cards.vectorSearch.title', {
+      defaultMessage: 'Set up vector search',
+    }),
+    navigateTo: {
+      appId: 'enterpriseSearchVectorSearch',
+    },
+    telemetryId: 'onboarding--search--vector',
+    order: 1,
+  },
+  {
+    solution: 'search',
+    icon: 'magnifyWithPlus',
+    title: i18n.translate('guidedOnboardingPackage.gettingStarted.cards.esreSearch.title', {
+      defaultMessage: 'Build a semantic search experience',
+    }),
+    navigateTo: {
+      appId: 'enterpriseSearchEsre',
+    },
+    telemetryId: 'onboarding--search--semantic',
+    order: 4,
+  },
+  {
+    solution: 'search',
     icon: 'wrench',
     title: (
       <FormattedMessage
@@ -45,7 +69,7 @@ export const guideCards: GuideCardConstants[] = [
     ),
     guideId: 'appSearch',
     telemetryId: 'onboarding--search--application',
-    order: 1,
+    order: 7,
   },
   {
     solution: 'search',
@@ -55,7 +79,7 @@ export const guideCards: GuideCardConstants[] = [
     }),
     guideId: 'websiteSearch',
     telemetryId: 'onboarding--search--website',
-    order: 4,
+    order: 10,
   },
   {
     solution: 'search',
@@ -63,7 +87,7 @@ export const guideCards: GuideCardConstants[] = [
     title: (
       <FormattedMessage
         id="guidedOnboardingPackage.gettingStarted.cards.databaseSearch.title"
-        defaultMessage="Search across databases and {lineBreak} business systems"
+        defaultMessage="Search across databases {lineBreak} and business systems"
         values={{
           lineBreak: <br />,
         }}
@@ -71,7 +95,7 @@ export const guideCards: GuideCardConstants[] = [
     ),
     guideId: 'databaseSearch',
     telemetryId: 'onboarding--search--database',
-    order: 7,
+    order: 13,
   },
   {
     solution: 'observability',
@@ -80,8 +104,7 @@ export const guideCards: GuideCardConstants[] = [
       defaultMessage: 'Collect and analyze my logs',
     }),
     navigateTo: {
-      appId: 'integrations',
-      path: '/browse?q=log',
+      appId: 'observabilityOnboarding',
     },
     telemetryId: 'onboarding--observability--logs',
     order: 2,
@@ -99,8 +122,8 @@ export const guideCards: GuideCardConstants[] = [
       />
     ),
     navigateTo: {
-      appId: 'home',
-      path: '#/tutorial/apm',
+      appId: 'apm',
+      path: '/tutorial',
     },
     telemetryId: 'onboarding--observability--apm',
     order: 5,
@@ -130,6 +153,36 @@ export const guideCards: GuideCardConstants[] = [
     guideId: 'kubernetes',
     telemetryId: 'onboarding--observability--kubernetes',
     order: 11,
+  },
+  {
+    solution: 'observability',
+    icon: 'videoPlayer',
+    title: i18n.translate(
+      'guidedOnboardingPackage.gettingStarted.cards.syntheticsObservability.title',
+      {
+        defaultMessage: 'Create a Synthetic Monitor',
+      }
+    ),
+    navigateTo: {
+      appId: 'synthetics',
+      path: '/monitors/getting-started',
+    },
+    telemetryId: 'onboarding--observability--synthetics',
+    order: 14,
+  },
+  {
+    solution: 'observability',
+    icon: 'visBarHorizontal',
+    title: i18n.translate(
+      'guidedOnboardingPackage.gettingStarted.cards.universalProfilingObservability.title',
+      { defaultMessage: 'Optimize my workloads with Universal Profiling' }
+    ),
+    navigateTo: {
+      appId: 'profiling',
+      path: '/add-data-instructions',
+    },
+    telemetryId: 'onboarding--observability--profiling',
+    order: 15,
   },
   {
     solution: 'security',
@@ -172,7 +225,7 @@ export const guideCards: GuideCardConstants[] = [
     title: (
       <FormattedMessage
         id="guidedOnboardingPackage.gettingStarted.cards.cloudSecurity.title"
-        defaultMessage="Secure my cloud assets with {lineBreak} cloud security posture management (CSPM)"
+        defaultMessage="Secure my cloud assets with cloud {lineBreak} security posture management (CSPM)"
         values={{
           lineBreak: <br />,
         }}

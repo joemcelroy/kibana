@@ -16,11 +16,12 @@ import {
   setResponderActionLogDateRange,
 } from '../../screens/responder';
 import { login } from '../../tasks/login';
+import { loadPage } from '../../tasks/common';
 import { indexNewCase } from '../../tasks/index_new_case';
 import { indexEndpointHosts } from '../../tasks/index_endpoint_hosts';
 import { indexEndpointRuleAlerts } from '../../tasks/index_endpoint_rule_alerts';
 
-describe('When accessing Endpoint Response Console', () => {
+describe('When accessing Endpoint Response Console', { tags: '@ess' }, () => {
   const performResponderSanityChecks = () => {
     openResponderActionLogFlyout();
     // Ensure the popover in the action log date quick select picker is accessible
@@ -102,14 +103,14 @@ describe('When accessing Endpoint Response Console', () => {
     });
 
     it('should display responder option in take action menu', () => {
-      cy.visit(caseUrlPath);
+      loadPage(caseUrlPath);
       closeAllToasts();
       openCaseAlertDetails();
       cy.getByTestSubj('endpointResponseActions-action-item').should('be.enabled');
     });
 
     it('should display Responder response action interface', () => {
-      cy.visit(caseUrlPath);
+      loadPage(caseUrlPath);
       closeAllToasts();
       openCaseAlertDetails();
       cy.getByTestSubj('endpointResponseActions-action-item').click();
