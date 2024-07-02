@@ -10,12 +10,14 @@ import React from 'react';
 import { ViewCodeAction } from './view_code/view_code_action';
 import { ViewQueryAction } from './view_query/view_query_action';
 import { EditContextAction } from './edit_context/edit_context_action';
+import { ViewHistoryAction } from "./view_history/view_history_action";
 
 export const Toolbar: React.FC = () => {
   return (
     <EuiFlexGroup gutterSize="s" data-test-subj="playground-header-actions">
       <EditContextAction />
       <ViewQueryAction />
+      <ViewHistoryAction />
       <ViewCodeAction />
     </EuiFlexGroup>
   );
