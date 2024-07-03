@@ -9,6 +9,7 @@ import React, { FC, PropsWithChildren } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FormProvider, useForm } from 'react-hook-form';
 import { ChatForm } from '../types';
+import { useFormHistory } from '../hooks/use_form_history';
 
 const queryClient = new QueryClient({});
 
@@ -27,6 +28,9 @@ export const PlaygroundProvider: FC<PropsWithChildren<PlaygroundProviderProps>> 
       indices: [],
     },
   });
+
+  const useHistory = useFormHistory(form);
+
 
   return (
     <QueryClientProvider client={queryClient}>
