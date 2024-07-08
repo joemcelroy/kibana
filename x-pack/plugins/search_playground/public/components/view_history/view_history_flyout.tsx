@@ -6,35 +6,24 @@
  */
 
 import {
-  EuiAccordion,
-  EuiSelectable,
-  EuiButton,
   EuiButtonEmpty,
-  EuiCodeBlock,
   EuiFlexGroup,
   EuiFlexItem,
   EuiFlyout,
   EuiFlyoutBody,
-  EuiFlyoutFooter,
   EuiFlyoutHeader,
   EuiPanel,
   EuiSpacer,
-  EuiSelectableOption,
   EuiText,
   EuiTitle,
-  EuiCheckbox,
-  EuiLink,
   EuiIcon,
+  EuiTimeline,
+  EuiTimelineItem,
 } from '@elastic/eui';
 import { FormattedMessage } from '@kbn/i18n-react';
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useFormContext } from 'react-hook-form';
-import { useController } from 'react-hook-form';
-import { AnalyticsEvents } from '../../analytics/constants';
-import { docLinks } from '../../../common/doc_links';
-import { useIndicesFields } from '../../hooks/use_indices_fields';
-import { useUsageTracker } from '../../hooks/use_usage_tracker';
-import { ChatForm, ChatFormFields, IndicesQuerySourceFields } from '../../types';
+import { ChatForm } from '../../types';
 import { useFormHistory } from '../../hooks/use_form_history';
 
 interface ViewHistoryFlyoutProps {
@@ -42,13 +31,12 @@ interface ViewHistoryFlyoutProps {
 }
 
 export const ViewHistoryFlyout: React.FC<ViewHistoryFlyoutProps> = ({ onClose }) => {
-  const usageTracker = useUsageTracker();
-  const useHistory = useFormHistory();
+  // const usageTracker = useUsageTracker();
+  const form = useFormContext<ChatForm>();
+  const { getHistory, revertToVersion } = useFormHistory(form);
 
-
-  // useEffect(() => {
-  //   usageTracker?.load(AnalyticsEvents.ViewHistoryFlyoutOpened);
-  // }, [usageTracker]);
+  const history = getHistory();
+  const historyDays = Object.keys(history);
 
   return (
     <EuiFlyout ownFocus onClose={onClose} size="s" data-test-subj="ViewHistoryFlyout">
@@ -73,7 +61,50 @@ export const ViewHistoryFlyout: React.FC<ViewHistoryFlyoutProps> = ({ onClose })
       </EuiFlyoutHeader>
       <EuiFlyoutBody>
         <EuiFlexGroup>
-          <EuiFlexItem grow={6}>hello</EuiFlexItem>
+          <EuiFlexItem grow={6}>
+            {historyDays.length > 0 &&
+              historyDays.map((day) => (
+                <EuiPanel>
+                  <EuiTitle size="xs">
+                    <h3>{day}</h3>
+                  </EuiTitle>
+                  <EuiTimeline>
+                    {history[day].map((entry) => (
+                      <EuiTimelineItem
+                        key={entry.id}
+                        icon={<EuiIcon type="editorBold" />}
+                        verticalAlign="center"
+                      >
+                        <EuiText>
+                          <p>{entry.summary.join('\n')}</p>
+                        </EuiText>
+                        <EuiButtonEmpty
+                          onClick={() => {
+                            revertToVersion(entry.id);
+                            onClose();
+                          }}
+                        >
+                          <FormattedMessage
+                            id="xpack.searchPlayground.viewHistory.flyout.revertButton"
+                            defaultMessage="Revert"
+                          />
+                        </EuiButtonEmpty>
+                      </EuiTimelineItem>
+                    ))}
+                  </EuiTimeline>
+                </EuiPanel>
+              ))}
+            {historyDays.length === 0 && (
+              <EuiText>
+                <p>
+                  <FormattedMessage
+                    id="xpack.searchPlayground.viewHistory.flyout.emptyHistoryMessage"
+                    defaultMessage="No history available."
+                  />
+                </p>
+              </EuiText>
+            )}
+          </EuiFlexItem>
         </EuiFlexGroup>
       </EuiFlyoutBody>
     </EuiFlyout>

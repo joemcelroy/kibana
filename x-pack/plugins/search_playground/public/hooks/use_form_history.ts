@@ -5,32 +5,97 @@
  * 2.0.
  */
 
-import { useFormContext } from 'react-hook-form';
+import { useEffect, useState } from 'react';
+import { UseFormReturn } from 'react-hook-form';
 import { ChatForm } from '../types';
-import { useEffect, useRef } from 'react';
-import { debounce } from 'lodash';
 
-export const useFormHistory = () => {
-  const { reset, watch, getValues } = useFormContext<ChatForm>();
+interface HistoryEntry {
+  id: string;
+  timestamp: number;
+  formData: ChatForm;
+}
 
-  const formValues = watch();
-
-  const saveFormToLocalStorage = (data) => {
-    const serializedData = JSON.stringify({
-      timestamp: new Date().toISOString(),
-      data,
-    });
-    localStorage.setItem(`form_${Date.now()}`, serializedData);
-  };
-
-  const debouncedSaveForm = debounce(() => {
-    debugger;
-    saveFormToLocalStorage(getValues());
-  }, 3000);
+export const useFormHistory = <TFieldValues extends ChatForm>(
+  form: UseFormReturn<TFieldValues>,
+  storageKey: string = 'PLAYGROUND'
+) => {
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
 
   useEffect(() => {
-    debouncedSaveForm();
-  }, [formValues]);
+    // Load history from localStorage
+    const storedHistory = localStorage.getItem(storageKey);
+    if (storedHistory) {
+      setHistory(JSON.parse(storedHistory));
+    }
+  }, [storageKey]);
 
-  return {};
+  useEffect(() => {
+    const subscription = form.watch((data: ChatForm) => {
+      const newEntry: HistoryEntry = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        formData: data,
+      };
+
+      setHistory((prevHistory) => {
+        const updatedHistory = [newEntry, ...prevHistory];
+
+        // Prune entries older than 30 days
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const prunedHistory = updatedHistory.filter((entry) => entry.timestamp >= thirtyDaysAgo);
+
+        // Save updated history to localStorage
+        localStorage.setItem(storageKey, JSON.stringify(prunedHistory));
+
+        return prunedHistory;
+      });
+    });
+
+    return () => subscription.unsubscribe();
+  }, [form, storageKey]);
+
+  const revertToVersion = (id: string) => {
+    const entry = history.find((item) => item.id === id);
+    if (entry && entry.formData) {
+      // @ts-ignore
+      form.reset(entry.formData);
+    }
+  };
+
+  const getHistory = () => {
+    return history.reduce<Record<string, any>>((acc, entry) => {
+      const date = new Date(entry.timestamp);
+      const dateStr = `${date.toLocaleString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })}`;
+      if (!acc[dateStr]) {
+        acc[dateStr] = [];
+      }
+      const summary = [
+        `Model: ${entry.formData.summarization_model}`,
+        `Prompt: ${entry.formData.prompt}`,
+        `Indices: ${entry.formData.indices.join(', ')}`,
+      ];
+
+      const existingEntry = acc[dateStr].find(
+        (existing) => existing.summary.join('') === summary.join('')
+      );
+      if (!existingEntry) {
+        acc[dateStr].push({
+          id: entry.id,
+          timestamp: entry.timestamp,
+          summary,
+        });
+      }
+
+      return acc;
+    }, {});
+  };
+
+  return {
+    getHistory,
+    revertToVersion,
+  };
 };
