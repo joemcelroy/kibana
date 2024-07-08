@@ -30,11 +30,11 @@ export const useFormHistory = <TFieldValues extends ChatForm>(
   }, [storageKey]);
 
   useEffect(() => {
-    const subscription = form.watch((data: ChatForm) => {
+    const subscription = form.watch(() => {
       const newEntry: HistoryEntry = {
         id: Date.now().toString(),
         timestamp: Date.now(),
-        formData: data,
+        formData: form.getValues(),
       };
 
       setHistory((prevHistory) => {
