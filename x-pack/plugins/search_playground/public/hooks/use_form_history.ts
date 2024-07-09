@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { ChatForm } from '../types';
 
-interface HistoryEntry {
+export interface HistoryEntry {
   id: string;
   timestamp: number;
   formData: ChatForm;
@@ -62,8 +62,8 @@ export const useFormHistory = <TFieldValues extends ChatForm>(
     }
   };
 
-  const getHistory = () => {
-    return history.reduce<Record<string, any>>((acc, entry) => {
+  const getHistory = (): Record<string, HistoryEntry[]> => {
+    return history.reduce<Record<string, HistoryEntry[]>>((acc, entry) => {
       const date = new Date(entry.timestamp);
       const dateStr = `${date.toLocaleString('en-US', {
         month: 'long',
@@ -73,21 +73,18 @@ export const useFormHistory = <TFieldValues extends ChatForm>(
       if (!acc[dateStr]) {
         acc[dateStr] = [];
       }
-      const summary = [
-        `Model: ${entry.formData.summarization_model}`,
-        `Prompt: ${entry.formData.prompt}`,
-        `Indices: ${entry.formData.indices.join(', ')}`,
-      ];
+
+      const key = JSON.stringify(entry.formData);
 
       const existingEntry = acc[dateStr].find(
-        (existing) => existing.summary.join('') === summary.join('')
+        (existing: HistoryEntry) => JSON.stringify(existing.formData) !== key
       );
-      if (!existingEntry) {
-        acc[dateStr].push({
-          id: entry.id,
-          timestamp: entry.timestamp,
-          summary,
-        });
+
+      const isReadyEntry =
+        !!entry.formData.summarization_model?.connectorName && entry.formData.indices?.length > 0;
+
+      if (!existingEntry && isReadyEntry) {
+        acc[dateStr].push(entry);
       }
 
       return acc;

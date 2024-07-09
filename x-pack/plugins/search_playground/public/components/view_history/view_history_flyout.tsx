@@ -24,11 +24,29 @@ import { FormattedMessage } from '@kbn/i18n-react';
 import React from 'react';
 import { useFormContext } from 'react-hook-form';
 import { ChatForm } from '../../types';
-import { useFormHistory } from '../../hooks/use_form_history';
+import { HistoryEntry, useFormHistory } from '../../hooks/use_form_history';
 
 interface ViewHistoryFlyoutProps {
   onClose: () => void;
 }
+
+export const summariseFormEntry = (formData: ChatForm) => {
+  return [
+    formData.summarization_model?.connectorName,
+    Object.keys(formData.query_fields)
+      .map((index) => {
+        const indexFields = formData.query_fields[index];
+        return `Target Fields: ${index} (${indexFields.join(', ')})`;
+      })
+      .join(', '),
+    Object.keys(formData.source_fields)
+      .map((index) => {
+        const indexFields = formData.source_fields[index];
+        return `Target Fields: ${index} (${indexFields.join(', ')})`;
+      })
+      .join(', '),
+  ];
+};
 
 export const ViewHistoryFlyout: React.FC<ViewHistoryFlyoutProps> = ({ onClose }) => {
   // const usageTracker = useUsageTracker();
@@ -76,7 +94,7 @@ export const ViewHistoryFlyout: React.FC<ViewHistoryFlyoutProps> = ({ onClose })
                         verticalAlign="center"
                       >
                         <EuiText>
-                          <p>{entry.summary.join('\n')}</p>
+                          <p>{summariseFormEntry(entry.formData).join('\\n')}</p>
                         </EuiText>
                         <EuiButtonEmpty
                           onClick={() => {
