@@ -205,10 +205,7 @@ export const SearchIndexDetailsPage = () => {
                     >
                       <FormattedMessage
                         id="xpack.searchIndices.indexAction.ApiReferenceButtonLabel"
-                        defaultMessage="{buttonLabel}"
-                        values={{
-                          buttonLabel: isDocumentsLoading ? 'Loading' : 'API Reference',
-                        }}
+                        defaultMessage="API Reference"
                       />
                     </EuiButtonEmpty>
                   ) : (
@@ -220,10 +217,7 @@ export const SearchIndexDetailsPage = () => {
                     >
                       <FormattedMessage
                         id="xpack.searchIndices.indexAction.useInPlaygroundButtonLabel"
-                        defaultMessage="{buttonLabel}"
-                        values={{
-                          buttonLabel: isDocumentsLoading ? 'Loading' : 'Use in Playground',
-                        }}
+                        defaultMessage="Use in Playground"
                       />
                     </EuiButtonEmpty>
                   )}
@@ -256,7 +250,7 @@ export const SearchIndexDetailsPage = () => {
                 </EuiFlexItem>
                 <EuiFlexItem>
                   <EuiFlexGroup>
-                    <QuickStats index={index} mappings={mappings} />
+                    <QuickStats documents={indexDocuments} index={index} mappings={mappings} />
                   </EuiFlexGroup>
                 </EuiFlexItem>
               </EuiFlexGroup>

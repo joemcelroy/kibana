@@ -27,6 +27,8 @@ export const fetchSearchResults = async (
         index: indexName,
         size,
         ...(!!query ? { q: escapeLuceneChars(query) } : {}),
+        // return all hits, not just abort early after 10000
+        track_total_hits: true,
       }),
     from,
     size

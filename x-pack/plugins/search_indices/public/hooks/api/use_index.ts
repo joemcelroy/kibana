@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { QueryKeys } from '../../constants';
 import { useKibana } from '../use_kibana';
 
-const POLLING_INTERVAL = 15 * 1000;
+const POLLING_INTERVAL = 5 * 1000;
 export const useIndex = (indexName: string) => {
   const { http } = useKibana().services;
   const queryKey = [QueryKeys.FetchIndex, indexName];
