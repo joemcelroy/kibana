@@ -12,7 +12,8 @@ import { contextEngineSkillAvailability } from '../context_engine_skill_availabi
 import content from './ai_index_automations.skill.md.text';
 import indexMetadataTemplateYaml from './index_metadata_template.yaml.text';
 import entityProfileTemplateYaml from './entity_profile_template.yaml.text';
-import documentTemplateYaml from './document_template.yaml.text';
+import documentOrchestrationTemplateYaml from './document_orchestration_template.yaml.text';
+import documentSummaryTemplateYaml from './document_summary_template.yaml.text';
 
 export const aiIndexAutomationsSkill = defineSkillType({
   id: 'ai-index-automations',
@@ -35,9 +36,14 @@ export const aiIndexAutomationsSkill = defineSkillType({
       content: entityProfileTemplateYaml,
     },
     {
-      name: 'document-template',
+      name: 'document-orchestration-template',
       relativePath: '.',
-      content: documentTemplateYaml,
+      content: documentOrchestrationTemplateYaml,
+    },
+    {
+      name: 'document-summary-template',
+      relativePath: '.',
+      content: documentSummaryTemplateYaml,
     },
   ],
   getRegistryTools: () => [

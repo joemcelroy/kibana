@@ -15,7 +15,7 @@ export const CONTEXT_ENGINE_PROMPT_FEATURE_ID = 'context_engine_prompt';
 
 /** Recommended endpoints for the context_engine_prompt feature, ordered by preference. */
 export const CONTEXT_ENGINE_PROMPT_RECOMMENDED_ENDPOINTS = [
-  '.google-gemini-3.5-flash-lite-chat_completion',
+  '.google-gemini-3.8-flash-chat_completion',
   '.anthropic-claude-4.5-haiku-chat_completion',
 ];
 

@@ -38,25 +38,68 @@ describe('aiIndexAutomationsSkill', () => {
     expect(names).toEqual([
       'index-metadata-template',
       'entity-profile-template',
-      'document-template',
+      'document-orchestration-template',
+      'document-summary-template',
     ]);
   });
 
   it('ships each template as a complete workflow rather than a fragment', () => {
     for (const reference of aiIndexAutomationsSkill.referencedContent ?? []) {
       expect(reference.relativePath).toBe('.');
-      // A template is only a starting point if it runs: it needs the sink, the gate that guards
-      // it, and the `consts` block that is the whole of the adaptation.
-      expect(reference.content).toContain('consts:');
-      expect(reference.content).toContain('ai_index_id');
-      expect(reference.content).toContain('context-engine.verifyKi');
-      expect(reference.content).toContain('context-engine.createKi');
-      expect(reference.content).toContain('esql-valid-runtime');
+      expect(reference.content).toContain('version: "1"');
+      expect(reference.content).toContain('steps:');
     }
   });
 
+  it('keeps the verified sink on the workflow that builds the indicator', () => {
+    const withSink = [
+      'index-metadata-template',
+      'entity-profile-template',
+      'document-summary-template',
+    ];
+
+    for (const name of withSink) {
+      const reference = (aiIndexAutomationsSkill.referencedContent ?? []).find(
+        (entry) => entry.name === name
+      );
+
+      expect(reference?.content).toContain('context-engine.verifyKi');
+      expect(reference?.content).toContain('context-engine.createKi');
+      expect(reference?.content).toContain('esql-valid-runtime');
+    }
+  });
+
+  it('fans document summaries out from a single-step parallel branch', () => {
+    const orchestration = (aiIndexAutomationsSkill.referencedContent ?? []).find(
+      (entry) => entry.name === 'document-orchestration-template'
+    );
+    const summary = (aiIndexAutomationsSkill.referencedContent ?? []).find(
+      (entry) => entry.name === 'document-summary-template'
+    );
+
+    expect(orchestration?.content).toContain('consts:');
+    expect(orchestration?.content).toContain('ai_index_id');
+    expect(orchestration?.content).toContain('type: parallel');
+    expect(orchestration?.content).toContain('mode: settled');
+    expect(orchestration?.content).toContain('max: 5');
+    expect(orchestration?.content).toContain('type: workflow.execute');
+    expect(orchestration?.content).toContain('document_workflow_id');
+    expect(summary?.content).toContain('reasoning-level: minimal');
+    expect(summary?.content).not.toContain('type: parallel');
+  });
+
   it('routes ai.prompt via the context-engine-prompt feature rather than a literal connector', () => {
-    for (const reference of aiIndexAutomationsSkill.referencedContent ?? []) {
+    const prompts = (aiIndexAutomationsSkill.referencedContent ?? []).filter((reference) =>
+      reference.content.includes('type: ai.prompt')
+    );
+
+    expect(prompts.map(({ name }) => name)).toEqual([
+      'index-metadata-template',
+      'entity-profile-template',
+      'document-summary-template',
+    ]);
+
+    for (const reference of prompts) {
       expect(reference.content).toContain('connector-id-by-feature: context_engine_prompt');
       expect(reference.content).not.toMatch(/^.*connector-id: /m);
     }
@@ -171,13 +214,16 @@ describe('aiIndexAutomationsSkill', () => {
 
     it('names each template where its strategy is described, so the brief can cite one', () => {
       expect(content).toMatch(/Index\/Table Metadata.*\n?.*`index-metadata-template`/);
-      expect(content).toMatch(/Bottom-Up.*\n?.*`document-template`/);
+      expect(content).toMatch(/Bottom-Up.*\n?.*`document-orchestration-template`/);
+      expect(content).toMatch(/`document-summary-template`/);
       expect(content).toMatch(/Cumulative \/ Wiki-style.*\n?.*`entity-profile-template`/);
     });
 
     it('points the strategies without a template at the one to start from', () => {
-      expect(content).toMatch(/Selective \/ Outlier.*\n?.*start from `document-template`/);
-      expect(content).toMatch(/Atomic Facts.*\n?.*start from `document-template`/);
+      expect(content).toMatch(
+        /Selective \/ Outlier.*\n?.*start from `document-orchestration-template`/
+      );
+      expect(content).toMatch(/Atomic Facts.*\n?.*start from `document-orchestration-template`/);
       expect(content).toMatch(/Detection \/ Feature.*\n?.*start from `index-metadata-template`/);
     });
 
@@ -257,6 +303,8 @@ describe('aiIndexAutomationsSkill', () => {
         '`elasticsearch.request`',
         '`ai.prompt`',
         '`foreach`',
+        '`parallel`',
+        '`workflow.execute`',
         '`if`',
         '`data.set`',
         '`console`',
@@ -272,6 +320,8 @@ describe('aiIndexAutomationsSkill', () => {
         'elasticsearch.request',
         'ai.prompt',
         'foreach',
+        'parallel',
+        'workflow.execute',
         'if',
         'data.set',
         'console',
