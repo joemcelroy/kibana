@@ -114,9 +114,6 @@ export const createRunAutomationTool = ({
         spaceId,
       });
 
-      // When the workflow state is unknown (no read privilege), use conditional language rather than
-      // asserting that it is disabled — execute privilege does not imply read privilege, so this is
-      // a supported combination, not a defensive edge case.
       const enableBlockNotice =
         saved !== undefined && saved.enabled !== true
           ? canUpdate
