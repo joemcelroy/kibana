@@ -27,12 +27,12 @@ export interface InstallAutomationTemplateResult extends SaveAutomationResult {
 import {
   AUTOMATION_TEMPLATE_TAGS,
   renderDocumentOrchestrationTemplate,
-  renderEntityProfileTemplate,
   renderIndexMetadataTemplate,
+  renderUnitProfileTemplate,
   type AutomationTemplateId,
   type DocumentOrchestrationTemplateValues,
-  type EntityProfileTemplateValues,
   type IndexMetadataTemplateValues,
+  type UnitProfileTemplateValues,
 } from './render';
 
 type WorkflowsManagementApi = WorkflowsServerPluginSetup['management'];
@@ -42,8 +42,8 @@ export type InstallAutomationTemplateParams =
       DocumentOrchestrationTemplateValues,
       'aiIndexId'
     >)
-  | ({ template: 'entity_profile' } & Omit<EntityProfileTemplateValues, 'aiIndexId'>)
-  | ({ template: 'index_metadata' } & Omit<IndexMetadataTemplateValues, 'aiIndexId'>);
+  | ({ template: 'index_metadata' } & Omit<IndexMetadataTemplateValues, 'aiIndexId'>)
+  | ({ template: 'unit_profile' } & Omit<UnitProfileTemplateValues, 'aiIndexId'>);
 
 const aiIndexIdFromAttachments = (attachments: AttachmentStateManager): string => {
   try {
@@ -71,8 +71,8 @@ const renderTemplate = (params: InstallAutomationTemplateParams, aiIndexId: stri
   if (params.template === 'document_orchestration') {
     return renderDocumentOrchestrationTemplate({ ...params, aiIndexId });
   }
-  if (params.template === 'entity_profile') {
-    return renderEntityProfileTemplate({ ...params, aiIndexId });
+  if (params.template === 'unit_profile') {
+    return renderUnitProfileTemplate({ ...params, aiIndexId });
   }
   return renderIndexMetadataTemplate({ ...params, aiIndexId });
 };

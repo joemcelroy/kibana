@@ -9,23 +9,28 @@ import {
   CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE,
   CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW,
   CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE,
+  CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE,
 } from '@kbn/workflows/managed';
 import { WorkflowSchemaBase } from '@kbn/workflows/spec/schema';
 import { parse } from 'yaml';
 import {
   AUTOMATION_TEMPLATE_TAGS,
   renderDocumentOrchestrationTemplate,
-  renderEntityProfileTemplate,
   renderIndexMetadataTemplate,
+  renderUnitProfileTemplate,
 } from './render';
 
-const entityValues = {
+const unitValues = {
   aiIndexId: 'airline-loyalty',
-  sourceIndex: 'airline_loyalty_customer_loyalty_history',
-  entityField: 'Province',
+  unitIndex: 'airline_loyalty_customer_loyalty_history',
+  unitKey: 'Province',
+  activityField: 'Enrollment Date',
   breakdownField: 'Loyalty Card',
+  catalogIndex: 'airline_loyalty_customer_loyalty_history',
+  catalogKey: 'Province',
+  discoveryFilter: '',
   metricFields: [] as string[],
-  maxEntities: 25,
+  maxUnits: 25,
 };
 
 describe('automation template rendering', () => {
@@ -92,45 +97,77 @@ describe('automation template rendering', () => {
     expect(yaml).not.toMatch(/__[A-Z0-9_]+__/);
   });
 
-  it('fills the entity profile consts', () => {
-    const yaml = renderEntityProfileTemplate(entityValues);
+  it('fills the unit profile consts', () => {
+    const yaml = renderUnitProfileTemplate(unitValues);
 
-    expect(yaml).toContain('entity_field: "Province"');
+    expect(yaml).toContain('unit_key: "Province"');
+    expect(yaml).toContain('activity_field: "Enrollment Date"');
     expect(yaml).toContain('breakdown_field: "Loyalty Card"');
-    expect(yaml).toContain('max_entities: 25');
-    expect(yaml).toContain(AUTOMATION_TEMPLATE_TAGS.entity_profile);
+    expect(yaml).toContain('discovery_filter: ""');
+    expect(yaml).toContain(AUTOMATION_TEMPLATE_TAGS.unit_profile);
     expect(yaml).not.toMatch(/__[A-Z0-9_]+__/);
   });
 
-  it('appends one averaged column per metric field, after the two fixed columns', () => {
-    const yaml = renderEntityProfileTemplate({
-      ...entityValues,
+  // `batch_size` times the page cap is what bounds a run, so the two are derived together.
+  it('bounds a run to maxUnits with the page size and the page cap', () => {
+    expect(renderUnitProfileTemplate({ ...unitValues, maxUnits: 25 })).toContain('batch_size: 25');
+    expect(renderUnitProfileTemplate({ ...unitValues, maxUnits: 25 })).toContain('limit: 1');
+
+    const large = renderUnitProfileTemplate({ ...unitValues, maxUnits: 500 });
+    expect(large).toContain('batch_size: 50');
+    expect(large).toContain('limit: 10');
+  });
+
+  it('rejects a discovery filter that is not a single WHERE line', () => {
+    expect(() =>
+      renderUnitProfileTemplate({ ...unitValues, discoveryFilter: 'WHERE tier == "gold"' })
+    ).toThrow(/discoveryFilter .* beginning with/);
+    expect(() =>
+      renderUnitProfileTemplate({
+        ...unitValues,
+        discoveryFilter: '| WHERE a == 1\n| DROP b',
+      })
+    ).toThrow(/line break|beginning with/);
+  });
+
+  it('keeps a discovery filter that is a single WHERE line', () => {
+    const yaml = renderUnitProfileTemplate({
+      ...unitValues,
+      discoveryFilter: '| WHERE `Loyalty Card` == "Star"',
+    });
+
+    expect(yaml).toContain('discovery_filter: "| WHERE `Loyalty Card` == \\"Star\\""');
+  });
+
+  // `unit_metrics` reads `unit_totals` by column position, so an appended metric has to be set
+  // from the column it actually lands in, after the four the template already defines.
+  it('appends one averaged column per metric field, after the four fixed columns', () => {
+    const yaml = renderUnitProfileTemplate({
+      ...unitValues,
       metricFields: ['CLV', 'Points Accumulated'],
     });
 
+    expect(yaml).toContain('avg_clv = AVG(`CLV`)');
+    expect(yaml).toContain('avg_points_accumulated = AVG(`Points Accumulated`)');
     expect(yaml).toContain(
-      'STATS doc_count = COUNT(*), distinct_breakdown = COUNT_DISTINCT(`{{ consts.breakdown_field }}`), avg_clv = AVG(`CLV`), avg_points_accumulated = AVG(`Points Accumulated`)'
+      'columns: doc_count, distinct_breakdown, first_seen, last_seen, avg_clv (AVG of CLV), avg_points_accumulated (AVG of Points Accumulated))'
     );
-    expect(yaml).toContain(
-      'columns: doc_count, distinct_breakdown, avg_clv (AVG of CLV), avg_points_accumulated (AVG of Points Accumulated))'
-    );
-    expect(yaml).toContain('doc_count: "{{ steps.entity_totals.output.values[0][0] }}"');
-    expect(yaml).toContain('distinct_breakdown: "{{ steps.entity_totals.output.values[0][1] }}"');
+    expect(yaml).toContain('avg_clv: "{{ steps.unit_totals.output.values[0][4] }}"');
+    expect(yaml).toContain('avg_points_accumulated: "{{ steps.unit_totals.output.values[0][5] }}"');
+    expect(yaml).toContain('- Average CLV: {{ steps.unit_metrics.output.avg_clv }}');
   });
 
   it('leaves the totals query unchanged when no metric fields are passed', () => {
-    const yaml = renderEntityProfileTemplate(entityValues);
+    const yaml = renderUnitProfileTemplate(unitValues);
 
-    expect(yaml).toContain(
-      'STATS doc_count = COUNT(*), distinct_breakdown = COUNT_DISTINCT(`{{ consts.breakdown_field }}`)\n'
-    );
+    expect(yaml).toContain('last_seen = MAX(`{{ consts.activity_field }}`)\n');
     expect(yaml).not.toContain('avg_');
-    expect(yaml).toContain('columns: doc_count, distinct_breakdown)');
+    expect(yaml).toContain('columns: doc_count, distinct_breakdown, first_seen, last_seen)');
   });
 
   it('gives metric fields that slug to the same name distinct columns', () => {
-    const yaml = renderEntityProfileTemplate({
-      ...entityValues,
+    const yaml = renderUnitProfileTemplate({
+      ...unitValues,
       metricFields: ['total points', 'total_points'],
     });
 
@@ -149,6 +186,10 @@ describe('automation template rendering', () => {
     expect(CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE).toContain(
       'KEEP _id, `{{ consts.title_field }}`, body'
     );
+    expect(CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE).toContain('| STATS BY `{{ consts.unit_key }}`');
+    expect(CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE).toContain(
+      'COUNT_DISTINCT(`{{ consts.breakdown_field }}`)'
+    );
   });
 
   it.each([
@@ -165,10 +206,7 @@ describe('automation template rendering', () => {
           bodyMaxChars: 12000,
         }),
     ],
-    [
-      'entity_profile',
-      () => renderEntityProfileTemplate({ ...entityValues, metricFields: ['CLV'] }),
-    ],
+    ['unit_profile', () => renderUnitProfileTemplate({ ...unitValues, metricFields: ['CLV'] })],
     [
       'index_metadata',
       () =>
@@ -188,10 +226,10 @@ describe('automation template rendering', () => {
 
   it('rejects an identifier that would break out of its backticks', () => {
     expect(() =>
-      renderEntityProfileTemplate({ ...entityValues, entityField: 'Province` | DROP x | EVAL y="' })
-    ).toThrow(/entityField .* backtick/);
+      renderUnitProfileTemplate({ ...unitValues, unitKey: 'Province` | DROP x | EVAL y="' })
+    ).toThrow(/unitKey .* backtick/);
     expect(() =>
-      renderEntityProfileTemplate({ ...entityValues, metricFields: ['{{ consts.ai_index_id }}'] })
+      renderUnitProfileTemplate({ ...unitValues, metricFields: ['{{ consts.ai_index_id }}'] })
     ).toThrow(/metricFields entry/);
     expect(() =>
       renderIndexMetadataTemplate({

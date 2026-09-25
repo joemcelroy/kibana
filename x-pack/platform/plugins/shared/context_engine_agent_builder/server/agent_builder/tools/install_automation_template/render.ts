@@ -8,17 +8,17 @@
 import {
   CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE,
   CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
-  CONTEXT_ENGINE_ENTITY_PROFILE_TEMPLATE,
   CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE,
+  CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE,
 } from '@kbn/workflows/managed';
 
-export type AutomationTemplateId = 'document_orchestration' | 'entity_profile' | 'index_metadata';
+export type AutomationTemplateId = 'document_orchestration' | 'index_metadata' | 'unit_profile';
 
 /** Stable tag written into each installed workflow so a later call updates that workflow. */
 export const AUTOMATION_TEMPLATE_TAGS: Record<AutomationTemplateId, string> = {
   document_orchestration: 'ce-template:document_orchestration',
-  entity_profile: 'ce-template:entity_profile',
   index_metadata: 'ce-template:index_metadata',
+  unit_profile: 'ce-template:unit_profile',
 };
 
 export interface DocumentOrchestrationTemplateValues {
@@ -31,13 +31,19 @@ export interface DocumentOrchestrationTemplateValues {
   bodyMaxChars: number;
 }
 
-export interface EntityProfileTemplateValues {
+export interface UnitProfileTemplateValues {
   aiIndexId: string;
-  sourceIndex: string;
-  entityField: string;
+  unitIndex: string;
+  unitKey: string;
+  activityField: string;
   breakdownField: string;
+  /** Index holding one record per unit. Equal to `unitIndex` when there is no separate record. */
+  catalogIndex: string;
+  catalogKey: string;
+  /** A complete ES|QL line beginning with `| WHERE`, or empty to take every unit. */
+  discoveryFilter: string;
   metricFields: string[];
-  maxEntities: number;
+  maxUnits: number;
 }
 
 export interface IndexMetadataTemplateValues {
@@ -114,31 +120,84 @@ export const renderDocumentOrchestrationTemplate = (
   });
 };
 
-export const renderEntityProfileTemplate = (values: EntityProfileTemplateValues): string => {
-  assertSafeIdentifier('sourceIndex', values.sourceIndex);
-  assertSafeIdentifier('entityField', values.entityField);
+/** Units per discovery page. A run covers `pages * UNIT_PAGE_SIZE` units at most. */
+const UNIT_PAGE_SIZE = 50;
+
+/**
+ * The discovery filter is spliced into ES|QL as written, so it is bounded to a single `| WHERE`
+ * line and kept clear of Liquid, which the workflow engine would expand before the query runs.
+ */
+const assertSafeDiscoveryFilter = (filter: string): void => {
+  if (filter === '') {
+    return;
+  }
+  if (!filter.startsWith('| WHERE ')) {
+    throw new Error(
+      `discoveryFilter "${filter}" must be empty or a complete ES|QL line beginning with "| WHERE ".`
+    );
+  }
+  if (/[\r\n]/.test(filter) || filter.includes('{{') || filter.includes('}}')) {
+    throw new Error(
+      `discoveryFilter "${filter}" contains a line break or a Liquid brace pair, neither of which belongs in a discovery filter.`
+    );
+  }
+};
+
+export const renderUnitProfileTemplate = (values: UnitProfileTemplateValues): string => {
+  assertSafeIdentifier('unitIndex', values.unitIndex);
+  assertSafeIdentifier('unitKey', values.unitKey);
+  assertSafeIdentifier('activityField', values.activityField);
   assertSafeIdentifier('breakdownField', values.breakdownField);
+  assertSafeIdentifier('catalogIndex', values.catalogIndex);
+  assertSafeIdentifier('catalogKey', values.catalogKey);
   for (const field of values.metricFields) {
     assertSafeIdentifier('metricFields entry', field);
   }
 
-  const taken = new Set<string>(['doc_count', 'distinct_breakdown']);
-  const metrics = values.metricFields.map((field) => ({
+  const discoveryFilter = values.discoveryFilter.trim();
+  assertSafeDiscoveryFilter(discoveryFilter);
+
+  // `unit_metrics` reads `unit_totals` by column position, and the template already defines four
+  // columns, so an appended metric starts at column 4.
+  const fixedColumns = ['doc_count', 'distinct_breakdown', 'first_seen', 'last_seen'];
+  const taken = new Set<string>(fixedColumns);
+  const metrics = values.metricFields.map((field, index) => ({
     field,
     column: metricColumnName(field, taken),
+    position: fixedColumns.length + index,
   }));
 
-  return replaceTokens(CONTEXT_ENGINE_ENTITY_PROFILE_TEMPLATE, {
+  const batchSize = Math.min(values.maxUnits, UNIT_PAGE_SIZE);
+
+  return replaceTokens(CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE, {
     __AI_INDEX_ID__: yamlString(values.aiIndexId),
-    __SOURCE_INDEX__: yamlString(values.sourceIndex),
-    __ENTITY_FIELD__: yamlString(values.entityField),
+    __UNIT_INDEX__: yamlString(values.unitIndex),
+    __UNIT_KEY__: yamlString(values.unitKey),
+    __ACTIVITY_FIELD__: yamlString(values.activityField),
     __BREAKDOWN_FIELD__: yamlString(values.breakdownField),
-    __MAX_ENTITIES__: String(values.maxEntities),
+    __CATALOG_INDEX__: yamlString(values.catalogIndex),
+    __CATALOG_KEY__: yamlString(values.catalogKey),
+    __DISCOVERY_FILTER__: yamlString(discoveryFilter),
+    __BATCH_SIZE__: String(batchSize),
+    __MAX_PAGES__: String(Math.ceil(values.maxUnits / batchSize)),
     __METRIC_STATS__: metrics
-      .map(({ field, column }) => `, ${column} = AVG(\`${field}\`)`)
+      .map(({ field, column }) => `,\n                        ${column} = AVG(\`${field}\`)`)
+      .join(''),
+    // Anchored to a comment line in the template, so the unrendered YAML still parses.
+    __METRIC_SETS__: metrics
+      .map(
+        ({ column, position }) =>
+          `\n              ${column}: "{{ steps.unit_totals.output.values[0][${position}] }}"`
+      )
       .join(''),
     __METRIC_COLUMNS__: metrics
       .map(({ field, column }) => `, ${column} (AVG of ${field})`)
+      .join(''),
+    __METRIC_LINES__: metrics
+      .map(
+        ({ field, column }) =>
+          `\n                  - Average ${field}: {{ steps.unit_metrics.output.${column} }}`
+      )
       .join(''),
   });
 };

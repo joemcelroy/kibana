@@ -9,9 +9,9 @@
 
 import DOCUMENT_ORCHESTRATION_TEMPLATE_YAML from './document_orchestration_template.yaml';
 import DOCUMENT_SUMMARY_YAML from './document_summary.yaml';
-import ENTITY_PROFILE_TEMPLATE_YAML from './entity_profile_template.yaml';
 import FEEDBACK_ANALYSIS_YAML from './feedback_analysis.yaml';
 import INDEX_METADATA_TEMPLATE_YAML from './index_metadata_template.yaml';
+import UNIT_PROFILE_TEMPLATE_YAML from './unit_profile_template.yaml';
 import type { ManagedWorkflowDefinition, ManagedWorkflowTemplateValues } from '../../types';
 
 export const CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID =
@@ -29,7 +29,7 @@ export const UNMANAGED_CALLABLE_CONTEXT_ENGINE_WORKFLOW_IDS = [
 
 /** YAML the install tool fills in. Not a managed workflow; the saved copy is the AI-index automation. */
 export const CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE = DOCUMENT_ORCHESTRATION_TEMPLATE_YAML;
-export const CONTEXT_ENGINE_ENTITY_PROFILE_TEMPLATE = ENTITY_PROFILE_TEMPLATE_YAML;
+export const CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE = UNIT_PROFILE_TEMPLATE_YAML;
 export const CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE = INDEX_METADATA_TEMPLATE_YAML;
 
 export interface ContextEngineFeedbackAnalysisWorkflowTemplateValues

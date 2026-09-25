@@ -140,8 +140,8 @@ describe('installAutomationTemplateHandler', () => {
   it('leaves an unrelated automation alone', async () => {
     getWorkflow.mockResolvedValue({
       id: 'wf-other',
-      name: 'Entity profiles',
-      tags: ['entity'],
+      name: 'Unit profiles',
+      tags: ['unit'],
     });
 
     await installAutomationTemplateHandler({
@@ -197,48 +197,56 @@ describe('installAutomationTemplateHandler', () => {
     );
   });
 
-  it('renders the entity profile with its metric columns and attaches it', async () => {
+  it('renders the unit profile with its metric columns and attaches it', async () => {
     await installAutomationTemplateHandler({
       params: {
-        template: 'entity_profile',
-        sourceIndex: 'loyalty-history',
-        entityField: 'Province',
+        template: 'unit_profile',
+        unitIndex: 'loyalty-history',
+        unitKey: 'Province',
+        activityField: 'Enrollment Date',
         breakdownField: 'Loyalty Card',
+        catalogIndex: 'loyalty-history',
+        catalogKey: 'Province',
+        discoveryFilter: '',
         metricFields: ['CLV'],
-        maxEntities: 25,
+        maxUnits: 25,
       },
       ...createDeps([]),
     });
 
     const yaml = saveAutomationHandlerMock.mock.calls[0][0].params.workflowYaml;
-    expect(yaml).toContain(AUTOMATION_TEMPLATE_TAGS.entity_profile);
-    expect(yaml).toContain('entity_field: "Province"');
+    expect(yaml).toContain(AUTOMATION_TEMPLATE_TAGS.unit_profile);
+    expect(yaml).toContain('unit_key: "Province"');
     expect(yaml).toContain('avg_clv = AVG(`CLV`)');
   });
 
-  it('overwrites the entity profile automation when its tag matches', async () => {
+  it('overwrites the unit profile automation when its tag matches', async () => {
     getWorkflow.mockResolvedValue({
-      id: 'wf-entity',
-      name: 'Entity profile KI automation',
-      tags: [AUTOMATION_TEMPLATE_TAGS.entity_profile],
+      id: 'wf-unit',
+      name: 'Unit profile KI automation',
+      tags: [AUTOMATION_TEMPLATE_TAGS.unit_profile],
     });
 
     const result = await installAutomationTemplateHandler({
       params: {
-        template: 'entity_profile',
-        sourceIndex: 'loyalty-history',
-        entityField: 'Province',
+        template: 'unit_profile',
+        unitIndex: 'loyalty-history',
+        unitKey: 'Province',
+        activityField: 'Enrollment Date',
         breakdownField: 'Loyalty Card',
+        catalogIndex: 'loyalty-history',
+        catalogKey: 'Province',
+        discoveryFilter: '',
         metricFields: [],
-        maxEntities: 25,
+        maxUnits: 25,
       },
-      ...createDeps([{ type: 'workflow', value: 'wf-entity' }]),
+      ...createDeps([{ type: 'workflow', value: 'wf-unit' }]),
     });
 
     expect(result.replaced).toBe(true);
     expect(saveAutomationHandlerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        params: expect.objectContaining({ workflowId: 'wf-entity' }),
+        params: expect.objectContaining({ workflowId: 'wf-unit' }),
       })
     );
   });

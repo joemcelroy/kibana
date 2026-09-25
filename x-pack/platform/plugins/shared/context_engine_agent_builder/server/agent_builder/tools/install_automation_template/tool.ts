@@ -23,8 +23,9 @@ const MAX_FIELD_NAME_LENGTH = 256;
 const MAX_CORPUS_FILTER_LENGTH = 2000;
 const MAX_DOCUMENTS_LIMIT = 10_000;
 const MAX_BODY_CHARS_LIMIT = 50_000;
-const MAX_ENTITIES_LIMIT = 1000;
+const MAX_UNITS_LIMIT = 10_000;
 const MAX_METRIC_FIELDS = 10;
+const MAX_DISCOVERY_FILTER_LENGTH = 2000;
 
 /**
  * Which arguments belong to which template. Anything listed against another template is rejected
@@ -38,22 +39,31 @@ const TEMPLATE_FIELDS = {
     'maxDocuments',
     'bodyMaxChars',
   ],
-  entity_profile: ['entityField', 'breakdownField', 'metricFields', 'maxEntities'],
   index_metadata: ['categoryField'],
+  unit_profile: [
+    'unitKey',
+    'activityField',
+    'breakdownField',
+    'catalogIndex',
+    'catalogKey',
+    'discoveryFilter',
+    'metricFields',
+    'maxUnits',
+  ],
 } as const;
 
 const REQUIRED_TEMPLATE_FIELDS = {
   document_orchestration: ['titleField', 'bodyField'],
-  entity_profile: ['entityField', 'breakdownField'],
   index_metadata: ['categoryField'],
+  unit_profile: ['unitKey', 'activityField', 'breakdownField'],
 } as const;
 
 const installAutomationTemplateSchema = z
   .object({
     template: z
-      .enum(['document_orchestration', 'entity_profile', 'index_metadata'])
+      .enum(['document_orchestration', 'index_metadata', 'unit_profile'])
       .describe(
-        'Which automation to install. document_orchestration summarises each document. entity_profile writes one profile per recurring entity. index_metadata profiles the index.'
+        'Which automation to install. document_orchestration summarises each document. index_metadata profiles the index. unit_profile writes one profile per recurring unit.'
       ),
     sourceIndex: z
       .string()
@@ -103,13 +113,21 @@ const installAutomationTemplateSchema = z
       .max(MAX_FIELD_NAME_LENGTH)
       .optional()
       .describe('Keyword field the index profile groups by. Required for index_metadata.'),
-    entityField: z
+    unitKey: z
       .string()
       .min(1)
       .max(MAX_FIELD_NAME_LENGTH)
       .optional()
       .describe(
-        'Keyword field holding the entity identity. One profile is written per distinct value. Required for entity_profile.'
+        'Keyword field holding the unit identity. One profile is written per distinct value. Required for unit_profile.'
+      ),
+    activityField: z
+      .string()
+      .min(1)
+      .max(MAX_FIELD_NAME_LENGTH)
+      .optional()
+      .describe(
+        'Date field in sourceIndex. Its per-unit minimum and maximum bound the unit activity the profile reports. Required for unit_profile.'
       ),
     breakdownField: z
       .string()
@@ -117,23 +135,46 @@ const installAutomationTemplateSchema = z
       .max(MAX_FIELD_NAME_LENGTH)
       .optional()
       .describe(
-        'Second field whose per-entity distribution characterises the entity. Required for entity_profile.'
+        'Second field whose per-unit distribution characterises the unit. Required for unit_profile.'
+      ),
+    catalogIndex: z
+      .string()
+      .min(1)
+      .max(MAX_SOURCE_INDEX_LENGTH)
+      .optional()
+      .describe(
+        'Index holding one record per unit, such as a catalog row or a case header. unit_profile only. Defaults to sourceIndex, which means there is no separate record.'
+      ),
+    catalogKey: z
+      .string()
+      .min(1)
+      .max(MAX_FIELD_NAME_LENGTH)
+      .optional()
+      .describe(
+        'Field in catalogIndex holding the unit identity. unit_profile only. Defaults to unitKey.'
+      ),
+    discoveryFilter: z
+      .string()
+      .max(MAX_DISCOVERY_FILTER_LENGTH)
+      .optional()
+      .describe(
+        'ES|QL clause bounding which units are discovered, as a complete line beginning with "| WHERE". unit_profile only. Empty takes every unit, which is the default.'
       ),
     metricFields: z
       .array(z.string().min(1).max(MAX_FIELD_NAME_LENGTH))
       .max(MAX_METRIC_FIELDS)
       .optional()
       .describe(
-        'Numeric fields averaged per entity and quoted in the profile. These are what separate sibling profiles for a retriever, so pass the ones an analyst would compare entities on. entity_profile only. Defaults to none.'
+        'Numeric fields averaged per unit and quoted in the profile. These are what separate sibling profiles for a retriever, so pass the ones an analyst would compare units on. unit_profile only. Defaults to none.'
       ),
-    maxEntities: z
+    maxUnits: z
       .number()
       .int()
       .min(1)
-      .max(MAX_ENTITIES_LIMIT)
+      .max(MAX_UNITS_LIMIT)
       .optional()
       .describe(
-        'Upper bound on entities profiled in one run. Each costs a model call. entity_profile only. Defaults to 25.'
+        'Upper bound on units profiled in one run. Each costs a model call. unit_profile only. Defaults to 25.'
       ),
   })
   .superRefine((value, ctx) => {
@@ -183,17 +224,21 @@ const toInstallParams = (
     };
   }
 
-  if (input.template === 'entity_profile') {
-    if (!input.entityField || !input.breakdownField) {
-      throw new Error('entityField and breakdownField are required for entity_profile.');
+  if (input.template === 'unit_profile') {
+    if (!input.unitKey || !input.activityField || !input.breakdownField) {
+      throw new Error('unitKey, activityField and breakdownField are required for unit_profile.');
     }
     return {
-      template: 'entity_profile',
-      sourceIndex: input.sourceIndex,
-      entityField: input.entityField,
+      template: 'unit_profile',
+      unitIndex: input.sourceIndex,
+      unitKey: input.unitKey,
+      activityField: input.activityField,
       breakdownField: input.breakdownField,
+      catalogIndex: input.catalogIndex ?? input.sourceIndex,
+      catalogKey: input.catalogKey ?? input.unitKey,
+      discoveryFilter: input.discoveryFilter ?? '',
       metricFields: input.metricFields ?? [],
-      maxEntities: input.maxEntities ?? 25,
+      maxUnits: input.maxUnits ?? 25,
     };
   }
 
@@ -232,16 +277,15 @@ export const createInstallAutomationTemplateTool = ({
     openWorldHint: false,
   },
   description: dedent`
-    Install the index-metadata, document-orchestration or entity-profile automation on the Context
+    Install the index-metadata, document-orchestration or unit-profile automation on the Context
     Engine AI index attached to this conversation. Arguments fill the workflow consts. Do not pass
     an AI index id and do not write the YAML yourself. Do not start a subagent for these three
     templates.
     document_orchestration attaches only the orchestration. Each document is summarised by the
     system workflow system-context-engine-document-summary, which is already installed and is not
     attached to the AI index.
-    entity_profile writes one KI per distinct entityField value. Pass metricFields: sibling
-    profiles are interchangeable to a retriever unless their descriptions carry numbers that
-    separate them.
+    unit_profile writes one KI per distinct unitKey value. Pass metricFields: sibling profiles are
+    interchangeable to a retriever unless their descriptions carry numbers that separate them.
     If this template is already an automation on the AI index, the call replaces that workflow's
     definition and keeps the same workflow id. It does not add a second automation.
     To run it afterwards, call platform.context_engine.run_automation with the returned workflowId.

@@ -73,30 +73,35 @@ describe('install_automation_template schema', () => {
       schema.safeParse({ template: 'index_metadata', sourceIndex: 'loyalty-docs' }).success
     ).toBe(false);
     expect(
-      schema.safeParse({ template: 'entity_profile', sourceIndex: 'loyalty-history' }).success
+      schema.safeParse({ template: 'unit_profile', sourceIndex: 'loyalty-history' }).success
     ).toBe(false);
   });
 
-  it('takes an entity profile install with the metric fields optional', () => {
+  it('takes a unit profile install with the catalog and metric fields optional', () => {
     const parsed = schema.safeParse({
-      template: 'entity_profile',
+      template: 'unit_profile',
       sourceIndex: 'loyalty-history',
-      entityField: 'Province',
+      unitKey: 'Province',
+      activityField: 'Enrollment Date',
       breakdownField: 'Loyalty Card',
     });
 
     expect(parsed.success).toBe(true);
     if (parsed.success) {
+      expect(parsed.data.catalogIndex).toBeUndefined();
+      expect(parsed.data.catalogKey).toBeUndefined();
+      expect(parsed.data.discoveryFilter).toBeUndefined();
       expect(parsed.data.metricFields).toBeUndefined();
-      expect(parsed.data.maxEntities).toBeUndefined();
+      expect(parsed.data.maxUnits).toBeUndefined();
     }
   });
 
-  it('rejects arguments belonging to either other template on an entity install', () => {
+  it('rejects arguments belonging to either other template on a unit install', () => {
     const base = {
-      template: 'entity_profile',
+      template: 'unit_profile',
       sourceIndex: 'loyalty-history',
-      entityField: 'Province',
+      unitKey: 'Province',
+      activityField: 'Enrollment Date',
       breakdownField: 'Loyalty Card',
     };
 
@@ -104,13 +109,13 @@ describe('install_automation_template schema', () => {
     expect(schema.safeParse({ ...base, maxDocuments: 10 }).success).toBe(false);
   });
 
-  it('rejects entity arguments on the other two templates', () => {
+  it('rejects unit arguments on the other two templates', () => {
     expect(
       schema.safeParse({
         template: 'index_metadata',
         sourceIndex: 'loyalty-docs',
         categoryField: 'tier',
-        maxEntities: 10,
+        maxUnits: 10,
       }).success
     ).toBe(false);
     expect(
