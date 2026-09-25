@@ -6,7 +6,11 @@
  */
 
 import { defineSkillType } from '@kbn/agent-builder-server/skills/type_definition';
-import { contextEngineAiIndexTools, platformCoreTools } from '@kbn/agent-builder-common/tools';
+import {
+  contextEngineAiIndexTools,
+  contextEngineAutomationTools,
+  platformCoreTools,
+} from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
 import { CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE } from '@kbn/workflows/managed';
 import { kiShapesReference, strategyCatalogReference } from '../context_engine_shared';
@@ -57,8 +61,8 @@ export const aiIndexAutomationsSkill = defineSkillType({
     `${internalNamespaces.workflows}.get_trigger_definitions`,
     `${internalNamespaces.workflows}.get_examples`,
     `${internalNamespaces.workflows}.workflow_execute_step`,
-    'platform.context_engine.install_automation_template',
-    'platform.context_engine.save_automation',
-    'platform.context_engine.run_automation',
+    contextEngineAutomationTools.installAutomationTemplate,
+    contextEngineAutomationTools.saveAutomation,
+    contextEngineAutomationTools.runAutomation,
   ],
 });

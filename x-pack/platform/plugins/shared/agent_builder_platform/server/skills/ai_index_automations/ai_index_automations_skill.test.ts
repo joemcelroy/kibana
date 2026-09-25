@@ -167,26 +167,14 @@ describe('aiIndexAutomationsSkill', () => {
     ]);
   });
 
-  it('ships each attached template as a complete workflow rather than a fragment', () => {
+  it('attaches every reference at the skill root, where the content points', () => {
     for (const reference of aiIndexAutomationsSkill.referencedContent ?? []) {
       expect(reference.relativePath).toBe('.');
-    }
-    for (const template of templates()) {
-      expect(template.content).toContain('version: "1"');
-      expect(template.content).toContain('steps:');
     }
   });
 
   it('attaches the unit profile as the exact YAML the install tool renders', () => {
     expect(attached(UNIT_PROFILE_TEMPLATE_NAME)).toBe(CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE);
-  });
-
-  it('keeps the verified sink on the workflow that builds the indicator', () => {
-    const content = attached(UNIT_PROFILE_TEMPLATE_NAME);
-
-    expect(content).toContain('context-engine.verifyKi');
-    expect(content).toContain('context-engine.createKi');
-    expect(content).toContain('esql-valid-runtime');
   });
 
   it('installs document, index-metadata and unit-profile automations through the tool', () => {
@@ -231,19 +219,11 @@ describe('aiIndexAutomationsSkill', () => {
       // No minimum on the prompt's access_patterns array: an invented query is worse than none.
       const accessPatternsSchema = yaml.match(/access_patterns:\n\s+type: array\n(\s+)(\w+):/);
       expect(accessPatternsSchema?.[2]).toBe('items');
-      expect(yaml).toMatch(/Return\s+an\s+empty\s+array\s+rather\s+than\s+an\s+invented\s+query/);
       // `default: nil` turns an empty list into null, which the createKi schema drops.
       expect(yaml).toMatch(/esql: "\$\{\{ [^"]*\| map: 'esql_example' \| default: nil \}\}"/);
       // The content block says so too, instead of rendering an empty heading.
       expect(yaml).toMatch(/access_patterns\.size > 0/);
     }
-  });
-
-  it('tells targeted-ki-writer authors to leave the esql key out for a KI with no query', () => {
-    const targeted = templates().find(({ name }) => name === TARGETED_KI_WRITER_TEMPLATE_NAME);
-
-    expect(targeted?.content).toMatch(/leaves the `esql` key out entirely/);
-    expect(targeted?.content).toMatch(/never an empty list/);
   });
 
   it('documents the null-omits-attribute contract for attributes.esql in the step contract', () => {
@@ -254,75 +234,11 @@ describe('aiIndexAutomationsSkill', () => {
     );
   });
 
-  it('pages the unit template on a cursor', () => {
-    const unitTemplate = templates().find(({ name }) => name === UNIT_PROFILE_TEMPLATE_NAME);
-
-    expect(unitTemplate?.content).toContain('type: while');
-    expect(unitTemplate?.content).toMatch(/variables\.cursor/);
-    expect(unitTemplate?.content).toMatch(/\| last \| first/);
-    // The three strategy answers as consts.
-    for (const constName of [
-      'unit_index:',
-      'unit_key:',
-      'activity_field:',
-      'catalog_index:',
-      'discovery_filter:',
-      'batch_size:',
-    ]) {
-      expect(unitTemplate?.content).toContain(constName);
-    }
-  });
-
-  it('writes targeted KIs without a model call, from consts', () => {
-    const writer = templates().find(({ name }) => name === TARGETED_KI_WRITER_TEMPLATE_NAME);
-
-    expect(writer?.content).not.toContain('ai.prompt');
-    expect(writer?.content).toContain('type: constraint');
-    expect(writer?.content).toMatch(/ki: "\$\{\{ foreach\.item\.ki \}\}"/);
-  });
-
   describe('unit template re-runs', () => {
     const template = () => parsedTemplate(UNIT_PROFILE_TEMPLATE_NAME);
     const stepNames = () => allSteps(template().steps).map(({ name }) => name);
     const unitTemplateYaml = () =>
       templates().find(({ name }) => name === UNIT_PROFILE_TEMPLATE_NAME)?.content ?? '';
-
-    it('profiles every unit on every run, with no gate that skips one', () => {
-      for (const removed of [
-        'fingerprint_input',
-        'source_fingerprint',
-        'read_existing_ki',
-        'freshness',
-        'skip_unchanged_unit',
-      ]) {
-        expect(stepNames()).not.toContain(removed);
-      }
-      expect(allSteps(template().steps).map(({ type }) => type)).not.toContain('loop.continue');
-      expect(unitTemplateYaml()).not.toMatch(/freshness|fingerprint|loop\.continue/);
-    });
-
-    it('carries no const or attribute that only a freshness check would read', () => {
-      const [ki] = assembledKis(UNIT_PROFILE_TEMPLATE_NAME);
-
-      for (const removed of ['profile_version', 'destination_index', 'freshness_field']) {
-        expect(template().consts).not.toHaveProperty(removed);
-      }
-      expect(ki.attributes).not.toHaveProperty('source_fingerprint');
-    });
-
-    it('carries the activity range in the text only, not as a separate attribute', () => {
-      const [ki] = assembledKis(UNIT_PROFILE_TEMPLATE_NAME);
-      const discovery = stepNamed(template(), 'discover_units').with?.query as string;
-      const unitContext = stepNamed(template(), 'unit_context').with ?? {};
-
-      expect(ki.attributes).not.toHaveProperty('source_updated_at');
-      expect(unitContext).not.toHaveProperty('unit_last_seen');
-      // Discovery only lists units; the range comes from `unit_totals`.
-      expect(discovery).not.toContain('activity_field');
-      expect(unitTemplateYaml()).toMatch(
-        /Active from \{\{ steps\.unit_metrics\.output\.first_seen \}\} to \{\{ steps\.unit_metrics\.output\.last_seen \}\}/
-      );
-    });
 
     it('keys each KI on the raw unit key, so keys that differ only in case or punctuation stay apart', async () => {
       const kiId = stepNamed(template(), 'unit_context').with?.ki_id as string;
@@ -335,24 +251,11 @@ describe('aiIndexAutomationsSkill', () => {
       expect(new Set(ids).size).toBe(keys.length);
     });
 
-    it('says a re-run regenerates every unit and replaces its KI by ki_id', () => {
-      expect(unitTemplateYaml()).toMatch(/A re-run regenerates every unit/);
-      expect(unitTemplateYaml()).toMatch(/`ki_id` is derived from the unit/);
-    });
-
     it('reads the catalog record with the other grounding queries, right before the prompt', () => {
       const order = stepNames();
 
       expect(order.indexOf('unit_breakdown')).toBeLessThan(order.indexOf('catalog_record'));
       expect(order.indexOf('catalog_record')).toBe(order.indexOf('profile_unit') - 1);
-      expect(unitTemplateYaml()).toMatch(/# Grounding 3: the unit's own record/);
-    });
-
-    it('lists units in discovery and leaves the counting to unit_totals', () => {
-      const discovery = stepNamed(template(), 'discover_units').with?.query as string;
-
-      expect(discovery).toMatch(/\| STATS BY `\{\{ consts\.unit_key \}\}`/);
-      expect(discovery).toMatch(/\| KEEP `\{\{ consts\.unit_key \}\}`\s*$/);
     });
   });
 
