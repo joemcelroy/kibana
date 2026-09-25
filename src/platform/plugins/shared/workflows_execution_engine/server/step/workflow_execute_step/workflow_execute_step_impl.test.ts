@@ -170,7 +170,10 @@ describe('WorkflowExecuteStepImpl', () => {
       });
     });
 
-    it('lets an unmanaged parent call the document summary system workflow', async () => {
+    // Document summary is the definition that sets `callableByUnmanaged`; feedback analysis is
+    // a managed definition that does not. Using real definitions keeps the flag and the engine
+    // honest about each other.
+    it('lets an unmanaged parent call a definition that declares callableByUnmanaged', async () => {
       const init = createMockInit();
       const ctx = (init.stepExecutionRuntime as any).contextManager;
       ctx.renderValueAccordingToContext.mockReturnValue({
@@ -195,7 +198,7 @@ describe('WorkflowExecuteStepImpl', () => {
       );
     });
 
-    it('does not let an unmanaged parent call other context engine system workflows', async () => {
+    it('still hides a managed definition that does not declare callableByUnmanaged', async () => {
       const init = createMockInit();
       const ctx = (init.stepExecutionRuntime as any).contextManager;
       ctx.renderValueAccordingToContext.mockReturnValue({

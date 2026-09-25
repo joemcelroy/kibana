@@ -19,14 +19,6 @@ export const CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID =
 
 export const CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID = 'system-context-engine-document-summary';
 
-/**
- * System workflows an unmanaged AI-index automation is allowed to call. workflow.execute
- * otherwise hides managed and global workflows from an unmanaged parent.
- */
-export const UNMANAGED_CALLABLE_CONTEXT_ENGINE_WORKFLOW_IDS = [
-  CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
-] as const;
-
 // The `_TEMPLATE` exports are source YAML for `install_automation_template`, not managed
 // workflows: the tool fills their placeholders and saves the result as an ordinary AI-index
 // automation its owner may then edit. They stay out of `managedWorkflowDefinitions` because
@@ -88,6 +80,10 @@ export const CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW = {
   pluginId: 'contextEngine',
   version: 1,
   billable: false,
+  // The document orchestration that fans out to this one is an ordinary AI-index automation its
+  // owner may edit, so it calls this workflow as an unmanaged parent. Safe to open: the inputs
+  // are an index name and a document id, and the work is summarizing that document.
+  callableByUnmanaged: true,
   yaml: DOCUMENT_SUMMARY_YAML,
   management: CONTEXT_ENGINE_DOCUMENT_SUMMARY_MANAGEMENT,
 } as const satisfies ManagedWorkflowDefinition;

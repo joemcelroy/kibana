@@ -22,7 +22,7 @@ This guide covers:
 
 | Concept | Meaning |
 |---|---|
-| **Definition** | Code-owned descriptor: `id`, `pluginId`, `version`, `billable`, optional `visibility`, `yaml` or `yamlTemplate`, `management` policy. Lives in `@kbn/workflows/managed`. |
+| **Definition** | Code-owned descriptor: `id`, `pluginId`, `version`, `billable`, optional `visibility` and `callableByUnmanaged`, `yaml` or `yamlTemplate`, `management` policy. Lives in `@kbn/workflows/managed`. |
 | **Owner plugin** | Plugin that owns a definition (`pluginId`). Drives reconciliation and orphan cleanup. |
 | **Installed document** | Persisted workflow in `.workflows-*` indices, identified by `workflowId` + `spaceId`. |
 | **Reserved namespace** | All managed definition ids start with `system-`. The platform rejects this prefix for user-defined workflows. |
@@ -659,6 +659,34 @@ Global workflows (`spaceId: '*'`) are visible from any space, but each execution
 - the workflow lookup uses `includeGlobal: true`, so the global document is found from any space.
 - the execution document is stamped with the `spaceId` you pass in `options` — pass the requesting user's space, not `'*'`.
 - consequence: results of a global workflow run are visible only inside the space that triggered the run.
+
+### Being called from an unmanaged workflow (`callableByUnmanaged`)
+
+A `workflow.execute` step in an **unmanaged** workflow — one a user authored and can edit — cannot
+reach a managed definition. The engine scopes that lookup to `managedFilter: 'unmanaged'` and to the
+caller's own space, so a managed child is invisible twice over, and the step fails with
+`Workflow not found` rather than a permission error. Only a managed parent sees managed and global
+definitions.
+
+Set `callableByUnmanaged: true` on a definition to open it:
+
+```ts
+export const MY_WORKFLOW = {
+  id: MY_WORKFLOW_ID,
+  pluginId: 'myPlugin',
+  version: 1,
+  billable: false,
+  callableByUnmanaged: true,
+  yaml: MY_WORKFLOW_YAML,
+  management: { lifecycle: 'static', versionStrategy: 'auto', enablement: 'enforced' },
+} as const satisfies ManagedWorkflowDefinition;
+```
+
+This is a privilege decision, not wiring. Anything that opts in can be reached by any user-authored
+workflow that names its id, so its inputs have to be safe to accept from a caller the platform does
+not control. A definition that performs a privileged action, or gates one, should stay closed —
+this is what makes the proposals gate reachable only from code-owned workflows. Opting in is
+asserted by a test in `managed_workflow_definitions.test.ts`, so widening it shows up in review.
 
 ## 12) Global workflows: user-facing behavior
 

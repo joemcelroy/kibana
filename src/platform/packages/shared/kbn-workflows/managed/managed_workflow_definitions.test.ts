@@ -9,7 +9,11 @@
 
 import { parse } from 'yaml';
 import { z } from '@kbn/zod/v4';
-import { managedWorkflowDefinitions } from '.';
+import {
+  getManagedWorkflowDefinitions,
+  isManagedWorkflowCallableByUnmanaged,
+  managedWorkflowDefinitions,
+} from '.';
 import type { ManagedWorkflowTemplateValuesById } from '.';
 import {
   ALERTZERO_ACTION_ISOLATE_HOST_WORKFLOW_ID,
@@ -28,6 +32,7 @@ import {
   ALERTZERO_WORKER_FORENSICS_ENDPOINT_ANALYSIS_WORKFLOW_ID,
   ALERTZERO_WORKER_HUNT_CONTINUOUS_THREAT_HUNT_WORKFLOW_ID,
   CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE,
+  CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
   CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID,
   CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE,
   CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE,
@@ -317,9 +322,31 @@ describe('managedWorkflowDefinitions', () => {
     expect(ids).toContain(SECURITY_ALERT_ANALYSIS_WORKFLOW_ID);
   });
 
+  it('opens only reviewed definitions to unmanaged callers', () => {
+    const callable = getManagedWorkflowDefinitions()
+      .filter(({ callableByUnmanaged }) => callableByUnmanaged === true)
+      .map(({ id }) => id);
+
+    // An unmanaged parent is a workflow its owner can edit, so anything on this list can be
+    // reached by naming its id from user-authored YAML. Widening it is a privilege decision.
+    expect(callable).toEqual([CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID]);
+  });
+
+  it('treats an unknown id as not callable by an unmanaged parent', () => {
+    expect(isManagedWorkflowCallableByUnmanaged(CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID)).toBe(
+      true
+    );
+    expect(isManagedWorkflowCallableByUnmanaged(CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID)).toBe(
+      false
+    );
+    expect(isManagedWorkflowCallableByUnmanaged('system-does-not-exist')).toBe(false);
+  });
+
   it('excludes the install-tool templates, whose rendered copy the user owns and may edit', () => {
     const registeredYaml = new Set(
-      managedWorkflowDefinitions.filter(hasYaml).map(({ yaml }) => yaml)
+      getManagedWorkflowDefinitions()
+        .filter(hasYaml)
+        .map(({ yaml }) => yaml)
     );
 
     // Without this the assertions below pass for free if `yaml` is ever renamed.
