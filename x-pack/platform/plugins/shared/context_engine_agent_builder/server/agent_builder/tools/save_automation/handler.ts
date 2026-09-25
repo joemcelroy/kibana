@@ -7,11 +7,11 @@
 
 import { ATTACHMENT_REF_ACTOR, getLatestVersion } from '@kbn/agent-builder-common/attachments';
 import {
-  executeWorkflow,
   hasWorkflowCreatePrivilege,
   hasWorkflowExecutePrivilege,
   hasWorkflowReadPrivilege,
   hasWorkflowUpdatePrivilege,
+  startWorkflow,
 } from '@kbn/agent-builder-tools-base/workflows';
 import type { AttachmentStateManager } from '@kbn/agent-builder-server/attachments';
 import type { CoreStart, Logger } from '@kbn/core/server';
@@ -576,15 +576,28 @@ export const runSavedAutomation = async ({
       }
     }
 
-    const result = await executeWorkflow({
-      workflowId,
+    // Re-read after enabling so the model carries the stored `enabled`, rather than the `false`
+    // the copy above was fetched with.
+    const runnable = enabledForRun
+      ? await workflowsManagement.getWorkflow(workflowId, spaceId)
+      : workflow;
+    if (!runnable) {
+      return {
+        started: false,
+        reason: `Workflow '${workflowId}' was not found in this space, so it was not run.`,
+        ...(enabledForRun && { enabledForRun }),
+      };
+    }
+
+    // A full-corpus run costs a model call per document, so the turn returns the execution id to
+    // poll. `startWorkflow` rather than `executeWorkflow` because the latter waits for the
+    // execution document even when told not to wait for completion, and nothing here reads it.
+    const result = await startWorkflow({
+      workflow: runnable,
       workflowParams: {},
       request,
       spaceId,
       workflowApi: workflowsManagement,
-      // A full-corpus run costs a model call per document, so return the execution id to poll
-      // rather than holding the turn open until it finishes.
-      waitForCompletion: false,
     });
 
     if (!result.success) {
@@ -593,7 +606,7 @@ export const runSavedAutomation = async ({
 
     return {
       started: true,
-      executionId: result.execution.execution_id,
+      executionId: result.executionId,
       ...(enabledForRun && { enabledForRun }),
     };
   } catch (error) {

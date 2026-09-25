@@ -12,11 +12,12 @@ import { runAutomationHandler } from './handler';
 jest.mock('@kbn/agent-builder-tools-base/workflows', () => ({
   hasWorkflowExecutePrivilege: jest.fn().mockResolvedValue(true),
   hasWorkflowUpdatePrivilege: jest.fn().mockResolvedValue(true),
-  executeWorkflow: jest.fn(),
+  startWorkflow: jest.fn(),
 }));
 
-const { hasWorkflowExecutePrivilege, hasWorkflowUpdatePrivilege, executeWorkflow } =
-  jest.requireMock('@kbn/agent-builder-tools-base/workflows');
+const { hasWorkflowExecutePrivilege, hasWorkflowUpdatePrivilege, startWorkflow } = jest.requireMock(
+  '@kbn/agent-builder-tools-base/workflows'
+);
 
 describe('runAutomationHandler', () => {
   const request = httpServerMock.createKibanaRequest();
@@ -53,10 +54,7 @@ describe('runAutomationHandler', () => {
 
   it('returns started=true with executionId and statusCheckHint when run succeeds', async () => {
     getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
-    executeWorkflow.mockResolvedValue({
-      success: true,
-      execution: { execution_id: 'exec-456' },
-    });
+    startWorkflow.mockResolvedValue({ success: true, executionId: 'exec-456' });
 
     const result = await runAutomationHandler(buildDeps());
 
@@ -77,12 +75,9 @@ describe('runAutomationHandler', () => {
     expect(result.statusCheckHint).toBeUndefined();
   });
 
-  it('returns started=false when executeWorkflow fails', async () => {
+  it('returns started=false when the run could not be started', async () => {
     getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
-    executeWorkflow.mockResolvedValue({
-      success: false,
-      error: 'Workflow step failed',
-    });
+    startWorkflow.mockResolvedValue({ success: false, error: 'Workflow step failed' });
 
     const result = await runAutomationHandler(buildDeps());
 
@@ -93,10 +88,7 @@ describe('runAutomationHandler', () => {
 
   it('includes workflowUrl in non-default space', async () => {
     getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
-    executeWorkflow.mockResolvedValue({
-      success: true,
-      execution: { execution_id: 'exec-789' },
-    });
+    startWorkflow.mockResolvedValue({ success: true, executionId: 'exec-789' });
 
     const result = await runAutomationHandler({
       ...buildDeps(),
@@ -109,10 +101,7 @@ describe('runAutomationHandler', () => {
 
   it('workflowUrl includes the execution tab deep link when run started', async () => {
     getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
-    executeWorkflow.mockResolvedValue({
-      success: true,
-      execution: { execution_id: 'exec-deep' },
-    });
+    startWorkflow.mockResolvedValue({ success: true, executionId: 'exec-deep' });
 
     const result = await runAutomationHandler(buildDeps());
 
@@ -123,10 +112,7 @@ describe('runAutomationHandler', () => {
   it('enables a disabled workflow and returns enabledForRun=true', async () => {
     getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: false });
     updateWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
-    executeWorkflow.mockResolvedValue({
-      success: true,
-      execution: { execution_id: 'exec-enable' },
-    });
+    startWorkflow.mockResolvedValue({ success: true, executionId: 'exec-enable' });
 
     const result = await runAutomationHandler(buildDeps());
 
@@ -140,6 +126,29 @@ describe('runAutomationHandler', () => {
     expect(result.enabledForRun).toBe(true);
   });
 
+  it('runs the re-read workflow after enabling, not the disabled copy it started from', async () => {
+    getWorkflowMock
+      .mockResolvedValueOnce({ id: workflowId, enabled: false })
+      .mockResolvedValueOnce({ id: workflowId, enabled: true });
+    updateWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
+    startWorkflow.mockResolvedValue({ success: true, executionId: 'exec-reread' });
+
+    await runAutomationHandler(buildDeps());
+
+    expect(startWorkflow).toHaveBeenCalledWith(
+      expect.objectContaining({ workflow: { id: workflowId, enabled: true } })
+    );
+  });
+
+  it('does not re-read a workflow that was already enabled', async () => {
+    getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: true });
+    startWorkflow.mockResolvedValue({ success: true, executionId: 'exec-noreread' });
+
+    await runAutomationHandler(buildDeps());
+
+    expect(getWorkflowMock).toHaveBeenCalledTimes(1);
+  });
+
   it('returns started=false when update privilege is missing for a disabled workflow', async () => {
     getWorkflowMock.mockResolvedValue({ id: workflowId, enabled: false });
     hasWorkflowUpdatePrivilege.mockResolvedValue(false);
@@ -147,7 +156,7 @@ describe('runAutomationHandler', () => {
     const result = await runAutomationHandler(buildDeps());
 
     expect(updateWorkflowMock).not.toHaveBeenCalled();
-    expect(executeWorkflow).not.toHaveBeenCalled();
+    expect(startWorkflow).not.toHaveBeenCalled();
     expect(result.started).toBe(false);
     expect(result.reason).toContain('update privilege');
   });
@@ -162,7 +171,7 @@ describe('runAutomationHandler', () => {
 
     const result = await runAutomationHandler(buildDeps());
 
-    expect(executeWorkflow).not.toHaveBeenCalled();
+    expect(startWorkflow).not.toHaveBeenCalled();
     expect(result.started).toBe(false);
     expect(result.reason).toContain('could not be enabled');
     expect(result.reason).toContain('Workflow has no valid definition');
