@@ -662,13 +662,11 @@ Global workflows (`spaceId: '*'`) are visible from any space, but each execution
 
 ### Being called from an unmanaged workflow (`callableByUnmanaged`)
 
-A `workflow.execute` step in an **unmanaged** workflow — one a user authored and can edit — cannot
-reach a managed definition. The engine scopes that lookup to `managedFilter: 'unmanaged'` and to the
-caller's own space, so a managed child is invisible twice over, and the step fails with
-`Workflow not found` rather than a permission error. Only a managed parent sees managed and global
-definitions.
+An **unmanaged** workflow is one a user authored and can edit. Its `workflow.execute` steps cannot
+see managed definitions: the lookup is scoped to the caller's own space and to unmanaged workflows,
+so the step fails with `Workflow not found`, not a permission error.
 
-Set `callableByUnmanaged: true` on a definition to open it:
+Set `callableByUnmanaged: true` to open a definition to those callers:
 
 ```ts
 export const MY_WORKFLOW = {
@@ -682,11 +680,13 @@ export const MY_WORKFLOW = {
 } as const satisfies ManagedWorkflowDefinition;
 ```
 
-This is a privilege decision, not wiring. Anything that opts in can be reached by any user-authored
-workflow that names its id, so its inputs have to be safe to accept from a caller the platform does
-not control. A definition that performs a privileged action, or gates one, should stay closed —
-this is what makes the proposals gate reachable only from code-owned workflows. Opting in is
-asserted by a test in `managed_workflow_definitions.test.ts`, so widening it shows up in review.
+Treat this as a privilege decision. Anything that opts in can be called by any workflow that names
+its id, so its inputs must be safe from a caller you do not control. Keep it closed on definitions
+that perform or gate a privileged action — that is what limits the proposals gate to code-owned
+workflows.
+
+The opted-in set is asserted in `managed_workflow_definitions.test.ts`, so widening it shows up in
+review.
 
 ## 12) Global workflows: user-facing behavior
 
