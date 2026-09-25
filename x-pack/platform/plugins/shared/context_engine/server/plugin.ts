@@ -40,8 +40,8 @@ import type {
 import { createFeedbackAnalysisScheduleService } from './feedback_analysis/schedule';
 import {
   CONTEXT_ENGINE_WORKFLOW_OWNER,
-  installDocumentSummaryWorkflow,
-} from './document_summary/install';
+  installManagedWorkflows,
+} from './managed_workflows/install';
 import { AiIndexDataReadService } from './ai_indices/data_read_service';
 import { AiIndexService } from './ai_indices/service';
 import { AiIndexRegistry } from './ai_indices/registry';
@@ -381,7 +381,7 @@ export class ContextEnginePlugin
       ...(this.workflowsManagement ? { workflowsManagement: this.workflowsManagement } : {}),
     });
 
-    void installDocumentSummaryWorkflow({
+    void installManagedWorkflows({
       workflowsExtensions: startDeps.workflowsExtensions,
       logger: this.logger,
     });
