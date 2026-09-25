@@ -11,6 +11,10 @@ import type { KibanaRequest } from '@kbn/core/server';
 import type { EsWorkflow, WorkflowRepository } from '@kbn/workflows';
 import { ExecutionStatus } from '@kbn/workflows';
 import type { WorkflowExecuteGraphNode } from '@kbn/workflows/graph';
+import {
+  CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
+  CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID,
+} from '@kbn/workflows/managed';
 import { WorkflowExecuteStepImpl } from './workflow_execute_step_impl';
 import type { WorkflowExecuteStepImplInit } from './workflow_execute_step_impl';
 import type { WorkflowsExecutionEngineConfig } from '../../config';
@@ -164,6 +168,56 @@ describe('WorkflowExecuteStepImpl', () => {
         includeGlobal: true,
         managedFilter: 'all',
       });
+    });
+
+    it('lets an unmanaged parent call the document summary system workflow', async () => {
+      const init = createMockInit();
+      const ctx = (init.stepExecutionRuntime as any).contextManager;
+      ctx.renderValueAccordingToContext.mockReturnValue({
+        'workflow-id': CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
+        inputs: {},
+      });
+      const repo = init.workflowRepository as jest.Mocked<WorkflowRepository>;
+      repo.getWorkflow.mockResolvedValue(
+        createMockWorkflow({ id: CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID })
+      );
+
+      const step = new WorkflowExecuteStepImpl(init);
+      await step.run();
+
+      expect(repo.getWorkflow).toHaveBeenCalledWith(
+        CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
+        'default',
+        {
+          includeGlobal: true,
+          managedFilter: 'all',
+        }
+      );
+    });
+
+    it('does not let an unmanaged parent call other context engine system workflows', async () => {
+      const init = createMockInit();
+      const ctx = (init.stepExecutionRuntime as any).contextManager;
+      ctx.renderValueAccordingToContext.mockReturnValue({
+        'workflow-id': CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID,
+        inputs: {},
+      });
+      const repo = init.workflowRepository as jest.Mocked<WorkflowRepository>;
+      repo.getWorkflow.mockResolvedValue(
+        createMockWorkflow({ id: CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID })
+      );
+
+      const step = new WorkflowExecuteStepImpl(init);
+      await step.run();
+
+      expect(repo.getWorkflow).toHaveBeenCalledWith(
+        CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID,
+        'default',
+        {
+          includeGlobal: false,
+          managedFilter: 'unmanaged',
+        }
+      );
     });
 
     it('should not treat originManagedWorkflowId alone as a managed parent run', async () => {

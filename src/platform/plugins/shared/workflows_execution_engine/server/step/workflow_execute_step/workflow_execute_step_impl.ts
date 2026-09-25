@@ -15,6 +15,7 @@ import type {
   WorkflowRepository,
 } from '@kbn/workflows';
 import type { WorkflowExecuteAsyncGraphNode, WorkflowExecuteGraphNode } from '@kbn/workflows/graph';
+import { UNMANAGED_CALLABLE_CONTEXT_ENGINE_WORKFLOW_IDS } from '@kbn/workflows/managed';
 import { WorkflowExecuteAsyncStrategy } from './strategies/workflow_execute_async_strategy';
 import { WorkflowExecuteSyncStrategy } from './strategies/workflow_execute_sync_strategy';
 import type { StrategyResult } from './types';
@@ -198,9 +199,15 @@ export class WorkflowExecuteStepImpl implements NodeImplementation, CancellableN
 
   private async getWorkflow(workflowId: string): Promise<EsWorkflow | null> {
     const isManagedParentRun = this.isManagedParentExecution();
+    // Document KI orchestration is an unmanaged automation. It is allowed to call the
+    // global document-summary system workflow, and no other managed workflow.
+    const callableSystemWorkflow =
+      !isManagedParentRun &&
+      (UNMANAGED_CALLABLE_CONTEXT_ENGINE_WORKFLOW_IDS as readonly string[]).includes(workflowId);
+    const includeManaged = isManagedParentRun || callableSystemWorkflow;
     return this.init.workflowRepository.getWorkflow(workflowId, this.init.spaceId, {
-      includeGlobal: isManagedParentRun,
-      managedFilter: isManagedParentRun ? 'all' : 'unmanaged',
+      includeGlobal: includeManaged,
+      managedFilter: includeManaged ? 'all' : 'unmanaged',
     });
   }
 
@@ -219,7 +226,8 @@ export class WorkflowExecuteStepImpl implements NodeImplementation, CancellableN
       );
     }
     // Note: workflow visibility is validated by the repository fetch.
-    // Global definitions are included only for managed parent workflow runs.
+    // Global definitions are included for managed parent runs, and for the system
+    // workflows an unmanaged automation is explicitly allowed to call.
     if (!workflow.enabled) {
       throw new Error(
         `Workflow "${workflow.id}" is disabled (referenced by step "${node.stepId}" in workflow "${currentWorkflowId}")`

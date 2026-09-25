@@ -8,12 +8,9 @@
 import { defineSkillType } from '@kbn/agent-builder-server/skills/type_definition';
 import { contextEngineAiIndexTools, platformCoreTools } from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
+import { CONTEXT_ENGINE_ENTITY_PROFILE_TEMPLATE } from '@kbn/workflows/managed';
 import { contextEngineSkillAvailability } from '../context_engine_skill_availability';
 import content from './ai_index_automations.skill.md.text';
-import indexMetadataTemplateYaml from './index_metadata_template.yaml.text';
-import entityProfileTemplateYaml from './entity_profile_template.yaml.text';
-import documentOrchestrationTemplateYaml from './document_orchestration_template.yaml.text';
-import documentSummaryTemplateYaml from './document_summary_template.yaml.text';
 
 export const aiIndexAutomationsSkill = defineSkillType({
   id: 'ai-index-automations',
@@ -24,26 +21,13 @@ export const aiIndexAutomationsSkill = defineSkillType({
   description:
     'Read, draft and change the workflow automations that generate Knowledge Indicators for a Context Engine AI Index. Load when authoring a KI generation workflow, when inspecting what an existing automation does, when a proposed fix names a workflow step, or when validating or piloting an automation.',
   content,
+  // The same YAML the install tool renders, so the worked example the custom strategies copy
+  // cannot drift from the automation that actually ships.
   referencedContent: [
-    {
-      name: 'index-metadata-template',
-      relativePath: '.',
-      content: indexMetadataTemplateYaml,
-    },
     {
       name: 'entity-profile-template',
       relativePath: '.',
-      content: entityProfileTemplateYaml,
-    },
-    {
-      name: 'document-orchestration-template',
-      relativePath: '.',
-      content: documentOrchestrationTemplateYaml,
-    },
-    {
-      name: 'document-summary-template',
-      relativePath: '.',
-      content: documentSummaryTemplateYaml,
+      content: CONTEXT_ENGINE_ENTITY_PROFILE_TEMPLATE,
     },
   ],
   getRegistryTools: () => [
@@ -59,6 +43,7 @@ export const aiIndexAutomationsSkill = defineSkillType({
     `${internalNamespaces.workflows}.get_examples`,
     `${internalNamespaces.workflows}.get_connectors`,
     `${internalNamespaces.workflows}.workflow_execute_step`,
+    'platform.context_engine.install_automation_template',
     'platform.context_engine.save_automation',
     'platform.context_engine.run_automation',
   ],

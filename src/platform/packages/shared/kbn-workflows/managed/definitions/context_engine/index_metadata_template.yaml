@@ -4,13 +4,8 @@ version: "1"
 # This is a working workflow, not a sketch. Edit the `consts` block and it runs as it stands;
 # everything below `consts` is already correct and does not need to be rewritten to make it work.
 #
-# To adapt it:
-#   1. Set every value in `consts`.
-#   2. Add grounding aggregations for the fields that actually matter in your corpus, next to
-#      `esql_category_counts` below, and reference each new step in the prompt. Grounding is what
-#      stops the model inventing distributions, so a field the KI will make claims about needs an
-#      aggregation here.
-#   3. Replace the italicised corpus description in the prompt with what your data really is.
+# Installed by platform.context_engine.install_automation_template. The tool fills the consts.
+# Do not save this YAML yourself.
 #
 # Leave the shape alone: the ai.prompt schema, the assemble/verify/gate sequence and the
 # `attributes.esql` wiring are what make the KI retrievable and verified.
@@ -22,15 +17,16 @@ enabled: true
 
 consts:
   # The Context Engine AI index the indicators are written into.
-  ai_index_id: my-ai-index
+  ai_index_id: __AI_INDEX_ID__
   # The index being profiled. Also the index every generated ES|QL reads FROM.
-  source_index: my-source-index
+  source_index: __SOURCE_INDEX__
   # A keyword field whose distribution grounds the profile. Pick the one an analyst would
   # group by first.
-  category_field: my_category_field
+  category_field: __CATEGORY_FIELD__
 
 tags:
   - index-metadata
+  - ce-template:index_metadata
 
 triggers:
   - type: manual
@@ -59,13 +55,13 @@ steps:
     type: elasticsearch.esql.query
     with:
       format: json
-      query: "FROM {{ consts.source_index }} | STATS count = COUNT(*) BY {{ consts.category_field }} | SORT count DESC | LIMIT 50"
+      query: "FROM {{ consts.source_index }} | STATS count = COUNT(*) BY `{{ consts.category_field }}` | SORT count DESC | LIMIT 50"
 
   - name: esql_totals
     type: elasticsearch.esql.query
     with:
       format: json
-      query: "FROM {{ consts.source_index }} | STATS total = COUNT(*), distinct_categories = COUNT_DISTINCT({{ consts.category_field }})"
+      query: "FROM {{ consts.source_index }} | STATS total = COUNT(*), distinct_categories = COUNT_DISTINCT(`{{ consts.category_field }}`)"
 
   - name: generate_index_profile
     type: ai.prompt

@@ -32,15 +32,10 @@ describe('aiIndexAutomationsSkill', () => {
     expect(aiIndexAutomationsSkill.content.length).toBeGreaterThan(0);
   });
 
-  it('carries one workflow template per strategy that ships with one', () => {
+  it('carries the entity profile template for strategies the install tool does not cover', () => {
     const names = (aiIndexAutomationsSkill.referencedContent ?? []).map(({ name }) => name);
 
-    expect(names).toEqual([
-      'index-metadata-template',
-      'entity-profile-template',
-      'document-orchestration-template',
-      'document-summary-template',
-    ]);
+    expect(names).toEqual(['entity-profile-template']);
   });
 
   it('ships each template as a complete workflow rather than a fragment', () => {
@@ -52,11 +47,7 @@ describe('aiIndexAutomationsSkill', () => {
   });
 
   it('keeps the verified sink on the workflow that builds the indicator', () => {
-    const withSink = [
-      'index-metadata-template',
-      'entity-profile-template',
-      'document-summary-template',
-    ];
+    const withSink = ['entity-profile-template'];
 
     for (const name of withSink) {
       const reference = (aiIndexAutomationsSkill.referencedContent ?? []).find(
@@ -69,23 +60,14 @@ describe('aiIndexAutomationsSkill', () => {
     }
   });
 
-  it('fans document summaries out from a single-step parallel branch', () => {
-    const orchestration = (aiIndexAutomationsSkill.referencedContent ?? []).find(
-      (entry) => entry.name === 'document-orchestration-template'
-    );
-    const summary = (aiIndexAutomationsSkill.referencedContent ?? []).find(
-      (entry) => entry.name === 'document-summary-template'
-    );
+  it('installs document and index-metadata automations through the tool', () => {
+    const { content } = aiIndexAutomationsSkill;
 
-    expect(orchestration?.content).toContain('consts:');
-    expect(orchestration?.content).toContain('ai_index_id');
-    expect(orchestration?.content).toContain('type: parallel');
-    expect(orchestration?.content).toContain('mode: settled');
-    expect(orchestration?.content).toContain('max: 5');
-    expect(orchestration?.content).toContain('type: workflow.execute');
-    expect(orchestration?.content).toContain('document_workflow_id');
-    expect(summary?.content).toContain('reasoning-level: minimal');
-    expect(summary?.content).not.toContain('type: parallel');
+    expect(content).toContain('platform.context_engine.install_automation_template');
+    expect(content).toContain('system-context-engine-document-summary');
+    expect(content).toMatch(/calling it again replaces/i);
+    expect(content).not.toContain('document-summary-template');
+    expect(content).not.toContain('document_workflow_id');
   });
 
   it('routes ai.prompt via the context-engine-prompt feature rather than a literal connector', () => {
@@ -93,11 +75,7 @@ describe('aiIndexAutomationsSkill', () => {
       reference.content.includes('type: ai.prompt')
     );
 
-    expect(prompts.map(({ name }) => name)).toEqual([
-      'index-metadata-template',
-      'entity-profile-template',
-      'document-summary-template',
-    ]);
+    expect(prompts.map(({ name }) => name)).toEqual(['entity-profile-template']);
 
     for (const reference of prompts) {
       expect(reference.content).toContain('connector-id-by-feature: context_engine_prompt');
@@ -127,6 +105,7 @@ describe('aiIndexAutomationsSkill', () => {
       `${internalNamespaces.workflows}.get_examples`,
       `${internalNamespaces.workflows}.get_connectors`,
       `${internalNamespaces.workflows}.workflow_execute_step`,
+      'platform.context_engine.install_automation_template',
       'platform.context_engine.save_automation',
       'platform.context_engine.run_automation',
     ]);
@@ -212,19 +191,23 @@ describe('aiIndexAutomationsSkill', () => {
       expect(content).toMatch(/all take a raw\s+`yaml` string/);
     });
 
-    it('names each template where its strategy is described, so the brief can cite one', () => {
-      expect(content).toMatch(/Index\/Table Metadata.*\n?.*`index-metadata-template`/);
-      expect(content).toMatch(/Bottom-Up.*\n?.*`document-orchestration-template`/);
-      expect(content).toMatch(/`document-summary-template`/);
-      expect(content).toMatch(/Cumulative \/ Wiki-style.*\n?.*`entity-profile-template`/);
+    it('names the install tool for each of the three strategies it covers', () => {
+      expect(content).toMatch(/Index\/Table Metadata.*\n?.*install_automation_template/);
+      expect(content).toMatch(/Bottom-Up.*\n?.*install_automation_template/);
+      expect(content).toMatch(/Cumulative \/ Wiki-style.*\n?.*install_automation_template/);
+      expect(content).toContain('system-context-engine-document-summary');
     });
 
-    it('points the strategies without a template at the one to start from', () => {
-      expect(content).toMatch(
-        /Selective \/ Outlier.*\n?.*start from `document-orchestration-template`/
-      );
-      expect(content).toMatch(/Atomic Facts.*\n?.*start from `document-orchestration-template`/);
-      expect(content).toMatch(/Detection \/ Feature.*\n?.*start from `index-metadata-template`/);
+    it('tells the entity install to pass the metrics that separate sibling profiles', () => {
+      expect(content).toContain('`template: entity_profile`');
+      expect(content).toContain('**Pass `metricFields`.**');
+      expect(content).toMatch(/near-identical to a retriever unless their\s+descriptions carry/);
+    });
+
+    it('keeps strategies that need a different prompt off the install tool', () => {
+      expect(content).toMatch(/Selective \/ Outlier.*\n?.*custom workflow/);
+      expect(content).toMatch(/Atomic Facts.*\n?.*custom workflow/);
+      expect(content).toMatch(/Detection \/ Feature.*\n?.*custom workflow/);
     });
 
     it('says what a template already encodes, so it is edited rather than rewritten', () => {
@@ -233,9 +216,11 @@ describe('aiIndexAutomationsSkill', () => {
       expect(content).toMatch(/none of them announce themselves/);
     });
 
-    it('has the brief name the template, since a subagent without one writes from nothing', () => {
-      expect(content).toMatch(/\*\*the template it starts from, by name\*\*/);
-      expect(content).toMatch(/rediscovering what the\s+template already encodes/);
+    it('has the brief name the worked automation, since a subagent without one writes from nothing', () => {
+      expect(content).toMatch(
+        /\*\*the workflow it starts from, by name\*\* — `entity-profile-template`/
+      );
+      expect(content).toMatch(/rediscovering what\s+that automation already encodes/);
     });
 
     it('points at the lookup tools that cover built-in and connector step types', () => {
@@ -402,8 +387,10 @@ describe('aiIndexAutomationsSkill', () => {
       expect(content).toMatch(/not on\s+`context-engine\.createKi`/);
     });
 
-    it('points the pilot bound at the consts the templates already expose', () => {
-      expect(content).toMatch(/`max_entities`, `max_documents`, `corpus_filter`/);
+    it('points the pilot bound at the consts the entity template exposes', () => {
+      expect(content).toMatch(/`max_entities`/);
+      expect(content).toContain('are arguments to the install tool');
+      expect(content).toContain('you do not\nedit those workflows by hand.');
     });
 
     it('saves the piloted definition rather than a regenerated one', () => {

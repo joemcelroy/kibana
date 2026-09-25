@@ -115,6 +115,7 @@ export const AGENT_BUILDER_BUILTIN_TOOLS = [
   'custom_content_update_panel',
 
   // Platform – Context Engine
+  `${internalNamespaces.platformContextEngine}.install_automation_template`,
   `${internalNamespaces.platformContextEngine}.save_automation`,
   `${internalNamespaces.platformContextEngine}.run_automation`,
   ...Object.values(contextEngineAiIndexTools),

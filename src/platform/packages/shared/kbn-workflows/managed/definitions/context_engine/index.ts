@@ -7,11 +7,30 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
+import DOCUMENT_ORCHESTRATION_TEMPLATE_YAML from './document_orchestration_template.yaml';
+import DOCUMENT_SUMMARY_YAML from './document_summary.yaml';
+import ENTITY_PROFILE_TEMPLATE_YAML from './entity_profile_template.yaml';
 import FEEDBACK_ANALYSIS_YAML from './feedback_analysis.yaml';
+import INDEX_METADATA_TEMPLATE_YAML from './index_metadata_template.yaml';
 import type { ManagedWorkflowDefinition, ManagedWorkflowTemplateValues } from '../../types';
 
 export const CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID =
   'system-context-engine-feedback-analysis';
+
+export const CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID = 'system-context-engine-document-summary';
+
+/**
+ * System workflows an unmanaged AI-index automation is allowed to call. workflow.execute
+ * otherwise hides managed and global workflows from an unmanaged parent.
+ */
+export const UNMANAGED_CALLABLE_CONTEXT_ENGINE_WORKFLOW_IDS = [
+  CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
+] as const;
+
+/** YAML the install tool fills in. Not a managed workflow; the saved copy is the AI-index automation. */
+export const CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE = DOCUMENT_ORCHESTRATION_TEMPLATE_YAML;
+export const CONTEXT_ENGINE_ENTITY_PROFILE_TEMPLATE = ENTITY_PROFILE_TEMPLATE_YAML;
+export const CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE = INDEX_METADATA_TEMPLATE_YAML;
 
 export interface ContextEngineFeedbackAnalysisWorkflowTemplateValues
   extends ManagedWorkflowTemplateValues {
@@ -49,3 +68,21 @@ export const CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW = {
     }),
   management: CONTEXT_ENGINE_WORKFLOW_MANAGEMENT,
 } as const satisfies ManagedWorkflowDefinition<ContextEngineFeedbackAnalysisWorkflowTemplateValues>;
+
+// Enforced: workflow.execute rejects a disabled workflow, which would silently stop every
+// document orchestration. The manual trigger only declares inputs. Static: one global definition,
+// not one per index.
+const CONTEXT_ENGINE_DOCUMENT_SUMMARY_MANAGEMENT = {
+  lifecycle: 'static',
+  versionStrategy: 'auto',
+  enablement: 'enforced',
+} as const;
+
+export const CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW = {
+  id: CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
+  pluginId: 'contextEngine',
+  version: 1,
+  billable: false,
+  yaml: DOCUMENT_SUMMARY_YAML,
+  management: CONTEXT_ENGINE_DOCUMENT_SUMMARY_MANAGEMENT,
+} as const satisfies ManagedWorkflowDefinition;

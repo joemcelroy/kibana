@@ -6,15 +6,10 @@ version: "1"
 # The per-document prompt, verification and write are `document-summary-template`. Do not paste
 # them into the parallel branch.
 #
-# To adapt it:
-#   1. Set every value in `consts`. `corpus_filter` is the agreed bound on what gets indicated —
-#      it is a whole ES|QL line, so it can carry several conditions, and setting it to an empty
-#      string takes the whole index.
-#   2. Save `document-summary-template` first and set `document_workflow_id` to the workflowId
-#      that save returns. This workflow cannot run until that id is real.
-#   3. Add any further fields the summary should draw on to the `KEEP` in `discover_documents`,
-#      and pass them through on the `workflow.execute` inputs. `KEEP` fixes the column order
-#      `foreach.item` is read by.
+# Installed by platform.context_engine.install_automation_template. The tool fills the consts.
+# Do not save this YAML yourself. Each branch calls the system workflow
+# system-context-engine-document-summary. That workflow is already installed and is not attached
+# to the AI index.
 #
 # A parallel `foreach` throws above 100 items. `parallel_batch_size` stays at that ceiling;
 # `concurrency.max` is how many summaries run at once, not how many rows a batch may hold.
@@ -26,28 +21,27 @@ enabled: true
 
 consts:
   # The Context Engine AI index the indicators are written into.
-  ai_index_id: my-ai-index
+  ai_index_id: __AI_INDEX_ID__
   # The index the documents are read from.
-  source_index: my-source-index
+  source_index: __SOURCE_INDEX__
   # The field used as the document's title.
-  title_field: title
+  title_field: __TITLE_FIELD__
   # The field holding the document body.
-  body_field: body
-  # The agreed corpus filter, as a complete ES|QL line. Set to "" to take the whole index.
-  corpus_filter: "| WHERE published_at >= NOW() - 365 days"
+  body_field: __BODY_FIELD__
+  # The agreed corpus filter, as a complete ES|QL line. Empty takes the whole index.
+  corpus_filter: __CORPUS_FILTER__
   # Upper bound on documents summarised in one run. Each costs a model call.
-  max_documents: 50
+  max_documents: __MAX_DOCUMENTS__
   # Bodies are truncated before they reach the prompt so one long document cannot exhaust the
   # context window and silently drop the rest of the batch.
-  body_max_chars: 12000
+  body_max_chars: __BODY_MAX_CHARS__
   # Parallel fan-out ceiling. Do not raise this above 100.
   parallel_batch_size: 100
-  # Replaced with the workflowId returned when the document summary workflow is saved.
-  document_workflow_id: REPLACE_WITH_SAVED_DOCUMENT_WORKFLOW_ID
   no_rows: []
 
 tags:
   - document-ki
+  - ce-template:document_orchestration
 
 triggers:
   - type: manual
@@ -68,8 +62,8 @@ steps:
       query: |
         FROM {{ consts.source_index }} METADATA _id
         {{ consts.corpus_filter }}
-        | EVAL body = SUBSTRING({{ consts.body_field }}, 1, {{ consts.body_max_chars }})
-        | KEEP _id, {{ consts.title_field }}, body
+        | EVAL body = SUBSTRING(`{{ consts.body_field }}`, 1, {{ consts.body_max_chars }})
+        | KEEP _id, `{{ consts.title_field }}`, body
         | LIMIT {{ consts.max_documents }}
 
   # One parallel step per chunk, so a run never exceeds the fan-out ceiling.
@@ -101,7 +95,7 @@ steps:
           - name: summarize_document
             type: workflow.execute
             with:
-              workflow-id: "{{ consts.document_workflow_id }}"
+              workflow-id: __DOCUMENT_SUMMARY_WORKFLOW_ID__
               inputs:
                 ai_index_id: "{{ consts.ai_index_id }}"
                 source_index: "{{ consts.source_index }}"

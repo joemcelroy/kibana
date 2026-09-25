@@ -1,21 +1,11 @@
 version: "1"
-# Bottom-Up strategy — one document. The orchestration workflow calls this once per record.
+# Installed globally as system-context-engine-document-summary. One document per execution.
+# The document orchestration automation calls it. It is not attached to an AI index, and it is
+# not edited per corpus: the orchestration passes the document, and this workflow owns the prompt,
+# the verification, and the write.
 #
-# This is a working workflow, not a sketch. It does not discover the corpus and it does not loop.
-# Those live in `document-orchestration-template`, because a parallel branch cannot hold this
-# body: the branch has to be a straight line, and step output is keyed by step id, so two
-# branches that both run `summarize_document` read each other's results.
-#
-# To adapt it:
-#   1. Leave the `inputs` names alone. The orchestration passes them by these names.
-#   2. Tell the prompt what these documents are. "Support article" and "incident record" produce
-#      different summaries from the same text, and the model cannot tell which it is holding.
-#   3. Do not set `reasoning-level` to `none`. The recommended model rejects it. `minimal` is the
-#      level that still produces ES|QL the verifiers accept.
-#
-# One KI per document is the right granularity only for a bounded corpus of documents that each
-# answer something on their own. When a pass produces many near-identically-titled KIs, the corpus
-# wants a coarser strategy — see `analyze-and-improve`.
+# Do not set reasoning-level to none. The recommended model rejects it. minimal is the level that
+# still produces ES|QL the verifiers accept.
 name: Document KI summary
 description: >
   Summarises one document into a Knowledge Indicator, verifies its ES|QL, and writes the indicator

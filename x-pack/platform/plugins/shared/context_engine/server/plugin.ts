@@ -38,6 +38,10 @@ import type {
   WorkflowEnablementApi,
 } from './feedback_analysis/schedule';
 import { createFeedbackAnalysisScheduleService } from './feedback_analysis/schedule';
+import {
+  CONTEXT_ENGINE_WORKFLOW_OWNER,
+  installDocumentSummaryWorkflow,
+} from './document_summary/install';
 import { AiIndexDataReadService } from './ai_indices/data_read_service';
 import { AiIndexService } from './ai_indices/service';
 import { AiIndexRegistry } from './ai_indices/registry';
@@ -51,9 +55,6 @@ import { registerStepDefinitions } from './step_types';
 import { ContextEngineAnalyticsService } from './telemetry';
 import { isContextEngineEnabledInSpace } from './utils/is_context_engine_enabled_in_space';
 import { resolveSpaceId } from './utils/resolve_space_id';
-
-/** Must match the `pluginId` on the managed workflow definition. */
-const CONTEXT_ENGINE_WORKFLOW_OWNER = 'contextEngine';
 
 export class ContextEnginePlugin
   implements
@@ -378,6 +379,11 @@ export class ContextEnginePlugin
       getManagedWorkflowsClient: () =>
         startDeps.workflowsExtensions.initManagedWorkflowsClient(CONTEXT_ENGINE_WORKFLOW_OWNER),
       ...(this.workflowsManagement ? { workflowsManagement: this.workflowsManagement } : {}),
+    });
+
+    void installDocumentSummaryWorkflow({
+      workflowsExtensions: startDeps.workflowsExtensions,
+      logger: this.logger,
     });
 
     const soClient = coreStart.savedObjects.createInternalRepository();
