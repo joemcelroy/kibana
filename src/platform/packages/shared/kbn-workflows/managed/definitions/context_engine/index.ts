@@ -27,7 +27,12 @@ export const UNMANAGED_CALLABLE_CONTEXT_ENGINE_WORKFLOW_IDS = [
   CONTEXT_ENGINE_DOCUMENT_SUMMARY_WORKFLOW_ID,
 ] as const;
 
-/** YAML the install tool fills in. Not a managed workflow; the saved copy is the AI-index automation. */
+// The `_TEMPLATE` exports are source YAML for `install_automation_template`, not managed
+// workflows: the tool fills their placeholders and saves the result as an ordinary AI-index
+// automation its owner may then edit. They stay out of `managedWorkflowDefinitions` because
+// registering one would put a user-editable workflow under managed auto-update and orphan
+// cleanup; `managed_workflow_definitions.test.ts` holds that line. Within this folder the
+// `_template.yaml` filename suffix is what separates them from the definitions below.
 export const CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE = DOCUMENT_ORCHESTRATION_TEMPLATE_YAML;
 export const CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE = UNIT_PROFILE_TEMPLATE_YAML;
 export const CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE = INDEX_METADATA_TEMPLATE_YAML;

@@ -27,7 +27,10 @@ import {
   ALERTZERO_WORKER_FLOOR_ATTACK_DISCOVERY_WORKFLOW_ID,
   ALERTZERO_WORKER_FORENSICS_ENDPOINT_ANALYSIS_WORKFLOW_ID,
   ALERTZERO_WORKER_HUNT_CONTINUOUS_THREAT_HUNT_WORKFLOW_ID,
+  CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE,
   CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID,
+  CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE,
+  CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE,
   EXAMPLE_MANAGED_WORKFLOW_ID,
   SECURITY_ALERT_ANALYSIS_WORKFLOW_ID,
   SIGNIFICANT_EVENTS_SCHEDULED_DETECTION_WORKFLOW_ID,
@@ -312,6 +315,23 @@ describe('managedWorkflowDefinitions', () => {
   it('contains the Security alert analysis workflow', () => {
     const ids = managedWorkflowDefinitions.map(({ id }) => id);
     expect(ids).toContain(SECURITY_ALERT_ANALYSIS_WORKFLOW_ID);
+  });
+
+  it('excludes the install-tool templates, whose rendered copy the user owns and may edit', () => {
+    const registeredYaml = new Set(
+      managedWorkflowDefinitions.filter(hasYaml).map(({ yaml }) => yaml)
+    );
+
+    // Without this the assertions below pass for free if `yaml` is ever renamed.
+    expect(registeredYaml.size).toBeGreaterThan(0);
+
+    for (const template of [
+      CONTEXT_ENGINE_DOCUMENT_ORCHESTRATION_TEMPLATE,
+      CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE,
+      CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE,
+    ]) {
+      expect(registeredYaml.has(template)).toBe(false);
+    }
   });
 
   it.each(managedDefinitionsById)('%s uses the reserved system- id prefix', (id) => {
