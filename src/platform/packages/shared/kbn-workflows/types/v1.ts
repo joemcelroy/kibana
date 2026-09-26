@@ -502,6 +502,11 @@ export interface WorkflowListItemDto {
   enabled: boolean;
   managed?: boolean;
   managedBy?: string | null;
+  /**
+   * Whether a `workflow.execute` step in an unmanaged workflow may call this one. Derived from the
+   * managed definition registry rather than stored, so it tracks the shipped code.
+   */
+  callableByUnmanaged?: boolean;
   definition: WorkflowYaml | null;
   createdAt: string;
   history?: WorkflowExecutionHistoryModel[];

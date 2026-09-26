@@ -16,6 +16,7 @@ import type {
   WorkflowListDto,
   WorkflowStatsDto,
 } from '@kbn/workflows';
+import { isManagedWorkflowCallableByUnmanaged } from '@kbn/workflows/managed';
 import { buildWorkflowFilters } from '@kbn/workflows/server';
 import type { WorkflowListItemDto, WorkflowSortField } from '@kbn/workflows/types/v1';
 
@@ -224,6 +225,7 @@ export class WorkflowSearchService {
           ...workflow,
           description: workflow.description || '',
           definition: workflow.definition,
+          callableByUnmanaged: isManagedWorkflowCallableByUnmanaged(workflow.id),
         };
       })
       .filter((workflow): workflow is NonNullable<typeof workflow> => workflow !== null);
