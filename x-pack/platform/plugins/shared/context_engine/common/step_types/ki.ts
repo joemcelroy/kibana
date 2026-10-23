@@ -24,7 +24,15 @@ export const MAX_KI_REFERENCES = 100;
 export const MAX_KI_REFERENCE_URI_LENGTH = 2048;
 export const MAX_KI_REFERENCE_DESCRIPTION_LENGTH = 2048;
 
-export const KI_REFERENCE_RELATIONS = ['derived_from', 'relates_to', 'supersedes'] as const;
+export const MAX_KI_REFERENCE_TYPE_LENGTH = 128;
+
+export const KI_REFERENCE_RELATIONS = [
+  'derived_from',
+  'relates_to',
+  'supersedes',
+  'about',
+  'observed_in',
+] as const;
 export const KI_LIFECYCLE_STATUSES = ['active', 'deleted'] as const;
 
 export const aiIndexIdSchema = z
@@ -57,6 +65,12 @@ export const kiReferenceSchema = z.object({
     .max(MAX_KI_REFERENCE_URI_LENGTH)
     .describe('The referenced URI, for example index://logs-*'),
   relation: kiReferenceRelationSchema.optional(),
+  type: z
+    .string()
+    .min(1)
+    .max(MAX_KI_REFERENCE_TYPE_LENGTH)
+    .optional()
+    .describe('A finer-grained kind of relation, for example a configured relationship type'),
   description: z
     .string()
     .max(MAX_KI_REFERENCE_DESCRIPTION_LENGTH)

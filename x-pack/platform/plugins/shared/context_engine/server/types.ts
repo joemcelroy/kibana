@@ -8,6 +8,8 @@
 import type { PluginStartContract as ActionsPluginStart } from '@kbn/actions-plugin/server';
 import type { ElasticsearchClient, KibanaRequest } from '@kbn/core/server';
 import type { FeaturesPluginSetup } from '@kbn/features-plugin/server';
+import type { InferenceServerStart } from '@kbn/inference-plugin/server';
+import type { SearchInferenceEndpointsPluginStart } from '@kbn/search-inference-endpoints/server';
 import type { SecurityPluginStart } from '@kbn/security-plugin/server';
 import type { SpacesPluginStart } from '@kbn/spaces-plugin/server';
 import type { UsageCollectionSetup } from '@kbn/usage-collection-plugin/server';
@@ -25,6 +27,8 @@ import type { AiIndexDataReadServiceApi } from './ai_indices/data_read_service';
 import type { AiIndexService } from './ai_indices/service';
 import type { ImprovementsServiceApi } from './improvements/service';
 import type { SignalsServiceApi } from './signals/service';
+import type { ShortTermMemoryServiceApi } from './short_term_memory/service';
+import type { ForgetMemoryResult } from './dreaming/forget';
 
 export interface ContextEnginePluginSetup {
   registerAiIndex: (id: string, properties: AiIndexProperties) => void;
@@ -51,6 +55,10 @@ export interface ContextEnginePluginStart {
     esClient: ElasticsearchClient,
     spaceId: string
   ) => ImprovementsServiceApi;
+  /** The shared short-term memory stream. Runs as the internal user; authorize callers first. */
+  getShortTermMemoryService: () => ShortTermMemoryServiceApi;
+  /** Deletes a short-term memory and queues the long-term memory built from it for re-dreaming. */
+  forgetMemory: (spaceId: string, memoryId: string) => Promise<ForgetMemoryResult>;
 }
 
 /** Duck-typed so Context Engine does not depend on `@kbn/workflows-management-plugin` (Moon cycle). */
@@ -80,4 +88,7 @@ export interface ContextEngineStartDependencies {
   security: SecurityPluginStart;
   spaces?: SpacesPluginStart;
   workflowsExtensions: WorkflowsExtensionsServerPluginStart;
+  inference: InferenceServerStart;
+  /** Resolves the dreaming model; without it dreaming cannot run. */
+  searchInferenceEndpoints?: SearchInferenceEndpointsPluginStart;
 }

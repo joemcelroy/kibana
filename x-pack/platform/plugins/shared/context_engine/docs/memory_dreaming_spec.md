@@ -160,26 +160,38 @@ settings:
     max: 1
 triggers:
   - type: scheduled
-    with: { every: '__INTERVAL__' }
+    with: { every: '__INTERVAL_MINUTES__m' }
   - type: manual
+    inputs: { session_id, user_id, dry_run }     # '' means no target
 steps:
   - name: plan_run
     type: context-engine.getDreamingTasks
   - name: run_tasks
     type: foreach
     foreach: '${{ steps.plan_run.output.tasks }}'
-    iteration-on-failure: continue
+    iteration-on-failure: { continue: true }
     steps:
       - name: graphify
         type: context-engine.graphify
+        on-failure: { retry: { max-attempts: 2, delay: '30s' } }
         with:
-          task: '${{ foreach.item }}'
-          dry_run: '${{ inputs.dry_run | default: false }}'
+          task_id: '{{ foreach.item.task_id }}'
+          dry_run: '${{ steps.plan_run.output.dry_run }}'
   - name: commit
-    type: context-engine.commitDreamingState     # skipped on dry_run
+    type: context-engine.commitDreamingState     # always runs; on dry_run it only closes the run
   - name: output_result
     type: workflow.output
 ```
+
+The full definition is `kbn-workflows/managed/definitions/context_engine/dreaming.yaml`
+(`system-context-engine-dreaming`).
+
+### Run progress
+
+The run's plan and each task's progress live in the hidden index `.contextengine-dreaming-runs`,
+keyed by space, AI index and execution id. Memory content never goes there; tasks hold memory ids,
+and a task's saved plan holds the resolved operations. `commit` deletes the run's documents, along
+with any older than 7 days.
 
 ### Steps
 
@@ -187,11 +199,14 @@ steps:
    - Reads the config and state, and sets `until = now - settleLag`.
    - Pulls the memories written after the cursor, plus each `retry` group from its `from`
      position (or only the `_dream` target).
-   - Groups them by `group_by` and returns an ordered list of tasks
-     `[{ group_key, user_id, session_id, from, to, count }]`. The list holds ids and counts only.
-   - Tasks are sorted by user, then by each session's first memory.
-   - The run is capped by total memory count. Anything over the cap stays after the cursor, or in
+   - Groups them by user and `group_by`, splits groups over 200 memories, and saves the plan in
+     run progress. It returns `{ tasks: [{ task_id, group_key, count }], dry_run }`, so workflow
+     state holds ids and counts only.
+   - Tasks are sorted by user, then by each group's first memory.
+   - The run is capped at 2,000 memories. Anything over the cap stays after the cursor, or in
      `retry`, for the next run.
+   - Records the execution as `last_run` on the dreaming state. A run already in progress (within
+     the 45 minute timeout) makes the step fail.
 2. **`graphify`** turns one task's memories into long-term graph changes, entirely inside the
    step:
    - **Load.** Pulls this task's memories, and the user's current long-term facts and entities
@@ -211,9 +226,11 @@ steps:
    - **Output.** Returns only ids and counts (`created`, `updated`, `deleted`), so memory content
      never enters workflow state. With `dry_run`, it returns the change set and doesn't write.
 3. **`commitDreamingState`**
-   - Moves the cursor to `until`.
-   - Every task not recorded as done is written to `retry` at its `from` position.
-   - If `retry` is full, the cursor stays where it is and the run reports a warning.
+   - Moves the cursor to the last memory the plan read. A targeted run leaves the cursor alone.
+   - Every task not recorded as done is written to `retry` at its `from` position. Retry entries
+     consumed by the run are removed; entries queued during the run (by forget) are kept.
+   - If `retry` is full, the cursor stays where it is and the run reports `partial` with a warning.
+   - On a dry run, it only closes `last_run`, so the next run isn't blocked.
 
 ### Model
 
@@ -251,37 +268,36 @@ and provenance, and validates everything before it saves the plan.
 #### What the model returns
 
 The model returns a structured output schema. The change set uses arrays rather than maps keyed
-by id, because structured output modes handle arbitrary object keys poorly. The semantics are
-the ones from the architecture doc: an existing id overwrites, `null` deletes, a new id creates.
+by id, because structured output modes handle arbitrary object keys and `null` poorly. The
+semantics are the ones from the architecture doc: an existing id overwrites, `delete: true`
+deletes, a new id creates. On an update, any field left out keeps its current value.
 
 ```ts
 interface DreamingChangeSet {
   entities: Array<{
     ref: string;                 // an existing entity id, or a new key like "new:1"
-    entity: null | {             // null deletes an existing entity
-      type: string;              // a configured entity type, without the "entity." prefix
-      name: string;
-      description?: string;
-      attributes?: Record<string, string | number | boolean | string[]>; // configured keys only
-      source_memory_ids: string[]; // short-term memory ids
-    };
+    delete?: boolean;            // true deletes an existing entity
+    type?: string;               // a configured entity type, without the "entity." prefix
+    name?: string;
+    description?: string;
+    attributes?: Array<{ key: string; value: string }>; // configured keys only
+    source_memory_ids?: string[]; // short-term memory ids; required unless deleting
   }>;
   facts: Array<{
     ref: string;                 // an existing fact id, or a new key like "new:1"
-    fact: null | {               // null deletes an existing fact
-      type: string;              // a configured fact type, without the "memory.long_term." prefix
-      title: string;
-      content: string;
-      about: string[];           // entity refs, existing or new
-      source_memory_ids: string[]; // short-term memory ids
-    };
+    delete?: boolean;            // true deletes an existing fact
+    type?: string;               // a configured fact type, without the "memory.long_term." prefix
+    title?: string;
+    content?: string;
+    about?: string[];            // entity refs, existing or new; replaces the current list
+    source_memory_ids?: string[]; // short-term memory ids; required unless deleting
   }>;
   relationships: Array<{
     type: string;                // a configured relationship type
     source: string;              // entity ref
     target: string;              // entity ref
     remove?: boolean;            // true removes an existing relationship
-    source_memory_ids: string[]; // short-term memory ids
+    source_memory_ids?: string[]; // short-term memory ids
   }>;
 }
 ```
@@ -299,10 +315,10 @@ Anything the model leaves out stays unchanged. An empty change set is valid.
 - A relationship's source and target must resolve to entities of the configured source and
   target types.
 - Every `ref` must be either an id loaded for this task or a new key defined in this change set.
-  A `null` (delete) is only valid for an id that was loaded.
+  A delete is only valid for an id that was loaded.
 - Every `source_memory_ids` entry must be one of this task's short-term memory ids or an existing
   source of the KI. Upserts must list at least one.
-- Each list is capped (for example 200 items). Field lengths reuse the existing KI limits
+- Each list is capped at 200 items. Field lengths reuse the existing KI limits
   (`MAX_KI_TITLE_LENGTH`, `MAX_KI_CONTENT_LENGTH` and so on).
 
 #### What `graphify` writes
@@ -389,13 +405,19 @@ calling the model.
   volume. Each run is bounded by the per-run memory cap.
 - **Dependency.** Dreaming requires workflows management.
 
+## Defaults
+
+These started as open questions; the implementation picks these values, and they can be tuned:
+
+- `settleLag` is 30 seconds. A run reads at most 2,000 memories, and a task at most 200.
+- `retry` holds at most 100 entries. When two entries share a group key, the earliest `from` wins.
+- A change set list holds at most 200 items.
+- Entity name slugs are NFKD-normalized, stripped of accents, lowercased, with runs of other
+  characters turned into `-`, and capped at 96 characters (a hash is used if nothing is left).
+- Run-progress documents are deleted on commit, and any left over are removed after 7 days.
+
 ## Open questions
 
-- The value of `settleLag`, and the per-run memory cap.
-- The maximum size of `retry`.
 - Whether the `ai-index@mappings` template maps `references.relation` as a plain keyword, and
   whether a `references.type` field can be added. The template isn't defined in this plugin.
-- The per-list cap on a change set.
-- The slug rules for entity names (case folding, punctuation, length), which decide when two
-  names count as the same entity.
-- How long the run-progress documents are kept.
+- Recall doesn't yet leave out KIs marked `dreaming.stale`.

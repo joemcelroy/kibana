@@ -8,11 +8,14 @@
 import type { WorkflowsExtensionsServerPluginSetup } from '@kbn/workflows-extensions/server';
 import type { AiIndexService } from '../ai_indices/service';
 import type { ImprovementsServiceApi } from '../improvements/service';
+import type { DreamingRunProgress } from '../dreaming/run_progress';
+import type { DreamingService } from '../dreaming/service';
+import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
 import { registerStepDefinitions } from '.';
 import { mockKiStepTelemetry } from './test_utils';
 
 describe('registerStepDefinitions', () => {
-  it('registers the KI and feedback analysis step definitions', () => {
+  it('registers the KI, feedback analysis, and dreaming step definitions', () => {
     const definitions: Array<{ id: string }> = [];
     const workflowsExtensions = {
       registerStepDefinition: jest.fn((definition: { id: string }) => definitions.push(definition)),
@@ -35,6 +38,15 @@ describe('registerStepDefinitions', () => {
         checkWritePrivilege: async () => true,
         logger: telemetry.logger,
       },
+      dreaming: {
+        getAiIndexService: () => ({} as AiIndexService),
+        getDreamingService: () => ({} as DreamingService),
+        getShortTermMemory: () => ({} as ShortTermMemoryServiceApi),
+        getRunProgress: () => ({} as DreamingRunProgress),
+        getDreamingModel: jest.fn(),
+        isContextEngineEnabled: async () => true,
+        logger: telemetry.logger,
+      },
     });
 
     expect(definitions.map((definition) => definition.id)).toEqual([
@@ -43,6 +55,9 @@ describe('registerStepDefinitions', () => {
       'context-engine.deleteKi',
       'context-engine.getFeedbackContext',
       'context-engine.recordImprovements',
+      'context-engine.getDreamingTasks',
+      'context-engine.graphify',
+      'context-engine.commitDreamingState',
     ]);
   });
 });

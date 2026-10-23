@@ -7,6 +7,7 @@
  * License v3.0 only", or the "Server Side Public License, v 1".
  */
 
+import DREAMING_YAML from './dreaming.yaml';
 import FEEDBACK_ANALYSIS_YAML from './feedback_analysis.yaml';
 import type { ManagedWorkflowDefinition, ManagedWorkflowTemplateValues } from '../../types';
 
@@ -49,3 +50,25 @@ export const CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW = {
     }),
   management: CONTEXT_ENGINE_WORKFLOW_MANAGEMENT,
 } as const satisfies ManagedWorkflowDefinition<ContextEngineFeedbackAnalysisWorkflowTemplateValues>;
+
+export const CONTEXT_ENGINE_DREAMING_WORKFLOW_ID = 'system-context-engine-dreaming';
+
+export interface ContextEngineDreamingWorkflowTemplateValues extends ManagedWorkflowTemplateValues {
+  /** The AI index this instance dreams for. */
+  aiIndexId: string;
+  /** How often the workflow runs. */
+  intervalMinutes: number;
+}
+
+export const CONTEXT_ENGINE_DREAMING_WORKFLOW = {
+  id: CONTEXT_ENGINE_DREAMING_WORKFLOW_ID,
+  pluginId: 'contextEngine',
+  version: 1,
+  billable: false,
+  yamlTemplate: ({ aiIndexId, intervalMinutes }) =>
+    renderTemplate(DREAMING_YAML, {
+      __AI_INDEX_ID__: aiIndexId,
+      __INTERVAL_MINUTES__: intervalMinutes,
+    }),
+  management: CONTEXT_ENGINE_WORKFLOW_MANAGEMENT,
+} as const satisfies ManagedWorkflowDefinition<ContextEngineDreamingWorkflowTemplateValues>;

@@ -13,16 +13,24 @@ import { getUpdateKiStepDefinition } from './update_ki';
 import { getDeleteKiStepDefinition } from './delete_ki';
 import { getFeedbackContextStepDefinition } from './feedback_context';
 import { getRecordImprovementsStepDefinition } from './record_improvements';
+import {
+  getCommitDreamingStateStepDefinition,
+  getDreamingTasksStepDefinition,
+  getGraphifyStepDefinition,
+  type DreamingStepDependencies,
+} from './dreaming';
 
-/** Registers the KI and feedback analysis workflow steps. */
+/** Registers the KI, feedback analysis, and dreaming workflow steps. */
 export const registerStepDefinitions = ({
   workflowsExtensions,
   feedbackAnalysis,
+  dreaming,
   verifyKi,
   ...deps
 }: KiStepDependencies & {
   workflowsExtensions: WorkflowsExtensionsServerPluginSetup;
   feedbackAnalysis: FeedbackAnalysisStepDependencies;
+  dreaming: DreamingStepDependencies;
   verifyKi: VerifyKi;
 }): void => {
   workflowsExtensions.registerStepDefinition(getCreateKiStepDefinition({ ...deps, verifyKi }));
@@ -30,4 +38,7 @@ export const registerStepDefinitions = ({
   workflowsExtensions.registerStepDefinition(getDeleteKiStepDefinition(deps));
   workflowsExtensions.registerStepDefinition(getFeedbackContextStepDefinition(feedbackAnalysis));
   workflowsExtensions.registerStepDefinition(getRecordImprovementsStepDefinition(feedbackAnalysis));
+  workflowsExtensions.registerStepDefinition(getDreamingTasksStepDefinition(dreaming));
+  workflowsExtensions.registerStepDefinition(getGraphifyStepDefinition(dreaming));
+  workflowsExtensions.registerStepDefinition(getCommitDreamingStateStepDefinition(dreaming));
 };

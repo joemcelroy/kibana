@@ -1,0 +1,83 @@
+version: '1'
+name: 'Context Engine Dreaming'
+description: 'Turns the short-term memories of one Context Engine AI index space into long-term entities, facts, and relationships.'
+# Installed disabled, then enabled by Context Engine with the request of whoever turned dreaming
+# on for the AI index, so runs execute under an API key minted from that request.
+enabled: false
+tags:
+  - context-engine
+  - memory
+  - scheduled
+settings:
+  timeout: '45m'
+  concurrency:
+    key: 'context-engine-dreaming-__AI_INDEX_ID__'
+    strategy: drop
+    max: 1
+consts:
+  AI_INDEX_ID: '__AI_INDEX_ID__'
+outputs:
+  - name: status
+    type: string
+  - name: tasks
+    type: number
+  - name: failed_tasks
+    type: number
+triggers:
+  - type: scheduled
+    with:
+      every: '__INTERVAL_MINUTES__m'
+  - type: manual
+    inputs:
+      properties:
+        session_id:
+          type: string
+          default: ''
+          description: 'Dream only this session. The cursor does not move.'
+        user_id:
+          type: string
+          default: ''
+          description: 'Dream only this user. The cursor does not move.'
+        dry_run:
+          type: boolean
+          default: false
+          description: 'Plan and extract without writing to long-term memory.'
+steps:
+  - name: plan_run
+    type: context-engine.getDreamingTasks
+    with:
+      ai_index_id: '{{ consts.AI_INDEX_ID }}'
+      session_id: '{{ inputs.session_id | default: "" }}'
+      user_id: '{{ inputs.user_id | default: "" }}'
+      dry_run: '${{ inputs.dry_run | default: false }}'
+
+  # Tasks run one at a time, so each task reads what the previous one wrote. A failed task is
+  # retried, then skipped; commit queues it for the next run.
+  - name: run_tasks
+    type: foreach
+    foreach: '${{ steps.plan_run.output.tasks }}'
+    iteration-on-failure:
+      continue: true
+    steps:
+      - name: graphify
+        type: context-engine.graphify
+        on-failure:
+          retry:
+            max-attempts: 2
+            delay: '30s'
+        with:
+          ai_index_id: '{{ consts.AI_INDEX_ID }}'
+          task_id: '{{ foreach.item.task_id }}'
+          dry_run: '${{ steps.plan_run.output.dry_run }}'
+
+  - name: commit
+    type: context-engine.commitDreamingState
+    with:
+      ai_index_id: '{{ consts.AI_INDEX_ID }}'
+
+  - name: output_result
+    type: workflow.output
+    with:
+      status: '{{ steps.commit.output.status }}'
+      tasks: '${{ steps.commit.output.tasks }}'
+      failed_tasks: '${{ steps.commit.output.failed_tasks }}'

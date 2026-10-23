@@ -162,7 +162,11 @@ const isMemoryEnabledOnExistingAiIndex = async (
   }
 };
 
-const handleAiIndexError = (error: unknown, response: KibanaResponseFactory, logger: Logger) => {
+export const handleAiIndexError = (
+  error: unknown,
+  response: KibanaResponseFactory,
+  logger: Logger
+) => {
   if (
     error instanceof MemoryFeatureDisabledError ||
     error instanceof InvalidAiIndexDestError ||

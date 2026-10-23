@@ -9,6 +9,7 @@ import type { estypes } from '@elastic/elasticsearch';
 import type { ElasticsearchClient, Logger } from '@kbn/core/server';
 import { DEFAULT_SPACE_ID } from '@kbn/core-spaces-common';
 import { isResponseError } from '@kbn/es-errors';
+import { isEqual } from 'lodash';
 import pRetry from 'p-retry';
 import {
   AI_INDEX_DATA_STREAM_PREFIX as DATA_STREAM_PREFIX,
@@ -22,7 +23,13 @@ import type {
   AiIndexHttpItem,
   AiIndexProperties,
 } from '../../common/http_api/ai_indices';
+import type {
+  AiIndexDreaming,
+  AiIndexDreamingConfig,
+  AiIndexDreamingState,
+} from '../../common/dreaming';
 import { isIndexPattern } from '../../common/ai_index_dest';
+import { InvalidDreamingConfigError } from '../dreaming/errors';
 import { AI_INDEX_ID_PATTERN } from '../../common/validation';
 import { createSpaceDslFilter } from '../utils/space_filter';
 import {
@@ -75,6 +82,28 @@ const mergeManagedAiIndex = (
 });
 
 const ADD_AUTOMATION_CONFLICT_RETRIES = 2;
+const DREAMING_STATE_CONFLICT_RETRIES = 3;
+
+interface FoundAiIndexDocument {
+  docId: string;
+  document: AiIndexDocument;
+  seqNo?: number;
+  primaryTerm?: number;
+}
+
+type WritableAiIndexDocument = Omit<AiIndexDocument, 'date_created' | 'date_modified'>;
+
+const withoutDreamingState = ({ dreaming, ...rest }: AiIndexDocument) => {
+  if (!dreaming) {
+    return rest;
+  }
+  const { state, ...config } = dreaming;
+  return { ...rest, dreaming: config };
+};
+
+/** Whether `after` differs from `before` only in what a dreaming state update writes. */
+const isOnlyDreamingStateChange = (before: AiIndexDocument, after: AiIndexDocument): boolean =>
+  isEqual(withoutDreamingState(before), withoutDreamingState(after));
 
 export interface AiIndexManagedBootstrap {
   isManaged: (id: string) => boolean;
@@ -169,17 +198,15 @@ export class AiIndexService {
   ): Promise<'created' | 'updated'> {
     await this.assertValidDest(properties.dest);
 
-    const existing = await this.findDocument(aiIndexId, spaceId);
-    if (existing?.document.managed || (!existing && this.managedBootstrap?.isManaged(aiIndexId))) {
-      throw new AiIndexManagedError(aiIndexId);
-    }
-
-    return this.writeDocument(
-      aiIndexId,
-      spaceId,
-      { ...properties, id: aiIndexId, space: spaceId, managed: false },
-      existing
-    );
+    return this.writeRetryingDreamingStateConflict(aiIndexId, spaceId, (existing) => {
+      if (
+        existing?.document.managed ||
+        (!existing && this.managedBootstrap?.isManaged(aiIndexId))
+      ) {
+        throw new AiIndexManagedError(aiIndexId);
+      }
+      return { ...properties, id: aiIndexId, space: spaceId, managed: false };
+    });
   }
 
   /**
@@ -216,19 +243,51 @@ export class AiIndexService {
     );
   }
 
+  /**
+   * Writes a document built from the latest entry. A conflict caused only by a dreaming state
+   * update is retried once against the re-read entry, since the caller never sets that state.
+   */
+  private async writeRetryingDreamingStateConflict(
+    aiIndexId: string,
+    spaceId: string,
+    build: (existing: FoundAiIndexDocument | undefined) => WritableAiIndexDocument,
+    options?: { docId?: string }
+  ): Promise<'created' | 'updated'> {
+    const existing = await this.findDocument(aiIndexId, spaceId);
+    try {
+      return await this.writeDocument(aiIndexId, spaceId, build(existing), existing, options);
+    } catch (error) {
+      if (!(error instanceof AiIndexConflictError) || !existing) {
+        throw error;
+      }
+      const latest = await this.findDocument(aiIndexId, spaceId);
+      if (!latest || !isOnlyDreamingStateChange(existing.document, latest.document)) {
+        throw error;
+      }
+      return this.writeDocument(aiIndexId, spaceId, build(latest), latest, options);
+    }
+  }
+
+  /**
+   * Writes the full entry. `dreaming` is carried over from the stored entry unless the document
+   * sets it, so no metadata write can drop or roll back dreaming state.
+   */
   private async writeDocument(
     aiIndexId: string,
     spaceId: string,
-    document: Omit<AiIndexDocument, 'date_created' | 'date_modified'>,
-    existing: Awaited<ReturnType<typeof this.findDocument>>,
-    options?: { docId?: string }
+    document: WritableAiIndexDocument,
+    existing: FoundAiIndexDocument | undefined,
+    options?: { docId?: string; preserveDateModified?: boolean }
   ): Promise<'created' | 'updated'> {
     const now = new Date().toISOString();
+    const dreaming = document.dreaming ?? existing?.document.dreaming;
     const fullDocument: AiIndexDocument = {
       ...document,
+      ...(dreaming !== undefined && { dreaming }),
       memory_enabled: document.memory_enabled ?? true,
       date_created: existing?.document.date_created ?? now,
-      date_modified: now,
+      date_modified:
+        options?.preserveDateModified && existing ? existing.document.date_modified : now,
     };
 
     try {
@@ -281,26 +340,141 @@ export class AiIndexService {
     spaceId: string,
     feedbackAnalysis: AiIndexFeedbackAnalysis
   ): Promise<AiIndexFeedbackAnalysis> {
-    const existing = await this.findDocument(aiIndexId, spaceId);
-    if (!existing) {
-      throw new AiIndexNotFoundError(aiIndexId);
-    }
-
     // The dest is unchanged, so it is not re-validated here: an index whose
     // backing store was deleted after registration must still be switchable
     // off.
-    await this.writeDocument(
-      aiIndexId,
-      spaceId,
-      {
+    await this.writeRetryingDreamingStateConflict(aiIndexId, spaceId, (existing) => {
+      if (!existing) {
+        throw new AiIndexNotFoundError(aiIndexId);
+      }
+      return {
         ...existing.document,
         memory_enabled: resolveMemoryEnabled(existing.document),
         feedback_analysis: feedbackAnalysis,
-      },
-      existing
-    );
+      };
+    });
 
     return feedbackAnalysis;
+  }
+
+  /** Returns the stored dreaming block, or `undefined` when dreaming was never configured. */
+  async getDreaming(aiIndexId: string, spaceId: string): Promise<AiIndexDreaming | undefined> {
+    const existing = await this.findDocument(aiIndexId, spaceId);
+    if (!existing) {
+      // Bootstraps a managed entry, or throws when the AI index does not exist.
+      await this.get(aiIndexId, spaceId);
+      return undefined;
+    }
+    return existing.document.dreaming;
+  }
+
+  /**
+   * Replaces the dreaming config, keeping its state. Turning dreaming on for the first time
+   * starts the cursor at `now`, so dreaming never backfills unless the cursor is reset.
+   * Permitted on managed entries, like {@link setFeedbackAnalysis}.
+   */
+  async setDreamingConfig(
+    aiIndexId: string,
+    spaceId: string,
+    config: AiIndexDreamingConfig,
+    now: Date = new Date()
+  ): Promise<AiIndexDreaming> {
+    let dreaming: AiIndexDreaming | undefined;
+    await this.writeRetryingDreamingStateConflict(aiIndexId, spaceId, (existing) => {
+      if (!existing) {
+        throw new AiIndexNotFoundError(aiIndexId);
+      }
+      const memoryEnabled = resolveMemoryEnabled(existing.document);
+      if (config.enabled && !memoryEnabled) {
+        throw new InvalidDreamingConfigError(
+          `AI index '${aiIndexId}' does not have memory enabled, so it cannot dream.`
+        );
+      }
+      const state = existing.document.dreaming?.state ?? { retry: [] };
+      dreaming = {
+        ...config,
+        state:
+          config.enabled && state.cursor === undefined
+            ? { ...state, cursor: { timestamp: now.toISOString(), memory_id: '' } }
+            : state,
+      };
+      return { ...existing.document, memory_enabled: memoryEnabled, dreaming };
+    });
+    if (!dreaming) {
+      throw new AiIndexNotFoundError(aiIndexId);
+    }
+    return dreaming;
+  }
+
+  /**
+   * Rewrites only `dreaming.state`, retrying when the entry changed concurrently. `update`
+   * receives the latest stored block and may throw to reject the change.
+   */
+  async updateDreamingState(
+    aiIndexId: string,
+    spaceId: string,
+    update: (dreaming: AiIndexDreaming | undefined) => AiIndexDreamingState
+  ): Promise<AiIndexDreamingState> {
+    return pRetry(
+      async () => {
+        const existing = await this.findDocument(aiIndexId, spaceId);
+        if (!existing) {
+          throw new AiIndexNotFoundError(aiIndexId);
+        }
+        const current = existing.document.dreaming;
+        const state = update(current);
+        await this.writeDocument(
+          aiIndexId,
+          spaceId,
+          {
+            ...existing.document,
+            memory_enabled: resolveMemoryEnabled(existing.document),
+            dreaming: { ...(current ?? { enabled: false }), state },
+          },
+          existing,
+          { preserveDateModified: true }
+        );
+        return state;
+      },
+      {
+        retries: DREAMING_STATE_CONFLICT_RETRIES,
+        onFailedAttempt: (error) => {
+          if (!(error instanceof AiIndexConflictError)) {
+            throw error;
+          }
+        },
+      }
+    );
+  }
+
+  /** The space's AI indices that have dreaming turned on, with their resolved dest. */
+  async listDreaming(
+    spaceId: string
+  ): Promise<Array<{ id: string; dest: AiIndexDest; dreaming: AiIndexDreaming }>> {
+    const response = await this.storageClient.search({
+      size: MAX_AI_INDICES,
+      track_total_hits: false,
+      query: createSpaceDslFilter(spaceId),
+    });
+    return response.hits.hits.flatMap((hit) => {
+      if (!hit._source || hit._id === undefined) {
+        return [];
+      }
+      const document = toAiIndexDocument(hit._source, hit._id);
+      if (!document.dreaming?.enabled) {
+        return [];
+      }
+      const registration = document.managed
+        ? this.managedBootstrap?.getRegistration(document.id)
+        : undefined;
+      return [
+        {
+          id: document.id,
+          dest: registration?.dest ?? document.dest,
+          dreaming: document.dreaming,
+        },
+      ];
+    });
   }
 
   async get(aiIndexId: string, spaceId: string): Promise<AiIndexHttpItem> {
@@ -460,15 +634,7 @@ export class AiIndexService {
   private async findDocument(
     aiIndexId: string,
     spaceId: string
-  ): Promise<
-    | {
-        docId: string;
-        document: AiIndexDocument;
-        seqNo?: number;
-        primaryTerm?: number;
-      }
-    | undefined
-  > {
+  ): Promise<FoundAiIndexDocument | undefined> {
     const response = await this.storageClient.search({
       size: 1,
       track_total_hits: false,

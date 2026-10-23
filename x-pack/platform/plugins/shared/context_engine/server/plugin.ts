@@ -52,6 +52,18 @@ import { registerStepDefinitions } from './step_types';
 import { ContextEngineAnalyticsService, registerContextEngineUsageCollector } from './telemetry';
 import { isContextEngineEnabledInSpace } from './utils/is_context_engine_enabled_in_space';
 import { resolveSpaceId } from './utils/resolve_space_id';
+import { SHORT_TERM_MEMORY_DATA_STREAM, type ShortTermMemory } from '../common/dreaming';
+import {
+  shortTermMemoryDataStreamDefinition,
+  type ShortTermMemoryMappings,
+} from './short_term_memory/storage';
+import { ShortTermMemoryService } from './short_term_memory/service';
+import { DreamingRunProgress } from './dreaming/run_progress';
+import { DreamingService } from './dreaming/service';
+import { createDreamingScheduleService, type DreamingScheduleService } from './dreaming/schedule';
+import { resolveDreamingModel } from './dreaming/model';
+import { forgetMemory } from './dreaming/forget';
+import { registerDreamingRoutes } from './routes/dreaming';
 
 /** Must match the `pluginId` on the managed workflow definition. */
 const CONTEXT_ENGINE_WORKFLOW_OWNER = 'contextEngine';
@@ -82,8 +94,12 @@ export class ContextEnginePlugin
   private isFeedbackLoopEnabled: () => Promise<boolean> = async () => false;
   private readonly aiIndexRegistry = new AiIndexRegistry();
   private analyticsService?: ContextEngineAnalyticsService;
+  private shortTermMemoryService?: ShortTermMemoryService;
+  private dreamingRunProgress?: DreamingRunProgress;
+  private dreamingService?: DreamingService;
+  private dreamingSchedule?: DreamingScheduleService;
   private workflowsManagementApiPromise: Promise<
-    (DeleteWorkflowsApi & KiVerifierWorkflowRunner) | undefined
+    (DeleteWorkflowsApi & KiVerifierWorkflowRunner & WorkflowEnablementApi) | undefined
   > = Promise.resolve(undefined);
 
   constructor(context: PluginInitializerContext) {
@@ -96,6 +112,7 @@ export class ContextEnginePlugin
   ): ContextEnginePluginSetup {
     registerFeatures({ features: setupDeps.features });
     this.setupWorkflowsManagement(coreSetup);
+    coreSetup.dataStreams.registerDataStream(shortTermMemoryDataStreamDefinition);
 
     this.workflowsManagement = setupDeps.workflowsManagement?.management;
 
@@ -288,6 +305,29 @@ export class ContextEnginePlugin
       return hasAllRequested;
     };
 
+    const requireStarted = <T>(value: T | undefined, name: string): T => {
+      if (!value) {
+        throw new Error(`${name} not available — plugin has not started`);
+      }
+      return value;
+    };
+    const getShortTermMemory = () =>
+      requireStarted(this.shortTermMemoryService, 'Short-term memory service');
+    const getDreamingSchedule = () =>
+      requireStarted(this.dreamingSchedule, 'Dreaming schedule service');
+
+    registerDreamingRoutes({
+      router,
+      logger: this.logger.get('routes'),
+      getAiIndexService,
+      getShortTermMemory,
+      getDreamingSchedule,
+      getSpaces: async () => {
+        const [, startDeps] = await coreSetup.getStartServices();
+        return startDeps.spaces;
+      },
+    });
+
     registerStepDefinitions({
       workflowsExtensions: setupDeps.workflowsExtensions,
       analyticsService,
@@ -296,6 +336,18 @@ export class ContextEnginePlugin
       isContextEngineEnabled,
       checkWritePrivilege,
       verifyKi,
+      dreaming: {
+        getAiIndexService,
+        getShortTermMemory,
+        getDreamingService: () => requireStarted(this.dreamingService, 'Dreaming service'),
+        getRunProgress: () => requireStarted(this.dreamingRunProgress, 'Dreaming run progress'),
+        getDreamingModel: async (request) => {
+          const [, { inference, searchInferenceEndpoints }] = await coreSetup.getStartServices();
+          return resolveDreamingModel({ request, inference, searchInferenceEndpoints });
+        },
+        isContextEngineEnabled,
+        logger: this.logger.get('dreaming'),
+      },
       feedbackAnalysis: {
         getAiIndexService,
         getImprovementsService,
@@ -332,7 +384,9 @@ export class ContextEnginePlugin
     try {
       this.workflowsManagementApiPromise = coreSetup.plugins
         .onSetup<{
-          workflowsManagement: { management: DeleteWorkflowsApi & KiVerifierWorkflowRunner };
+          workflowsManagement: {
+            management: DeleteWorkflowsApi & KiVerifierWorkflowRunner & WorkflowEnablementApi;
+          };
         }>('workflowsManagement')
         .then(({ workflowsManagement }) =>
           workflowsManagement.found ? workflowsManagement.contract.management : undefined
@@ -423,11 +477,48 @@ export class ContextEnginePlugin
       );
     });
 
-    this.scheduleService = createFeedbackAnalysisScheduleService({
+    const getManagedWorkflowsClient = () =>
+      startDeps.workflowsExtensions.initManagedWorkflowsClient(CONTEXT_ENGINE_WORKFLOW_OWNER);
+    const feedbackAnalysisSchedule = createFeedbackAnalysisScheduleService({
       logger: this.logger,
-      getManagedWorkflowsClient: () =>
-        startDeps.workflowsExtensions.initManagedWorkflowsClient(CONTEXT_ENGINE_WORKFLOW_OWNER),
+      getManagedWorkflowsClient,
       ...(this.workflowsManagement ? { workflowsManagement: this.workflowsManagement } : {}),
+    });
+    const dreamingSchedule = createDreamingScheduleService({
+      logger: this.logger,
+      getManagedWorkflowsClient,
+      getWorkflowsManagement: () => this.workflowsManagementApiPromise,
+    });
+    this.dreamingSchedule = dreamingSchedule;
+    this.scheduleService = {
+      reconcile: (params) => feedbackAnalysisSchedule.reconcile(params),
+      // Deleting an AI index tears down every schedule it owns.
+      remove: async (params) => {
+        await Promise.all([
+          feedbackAnalysisSchedule.remove(params),
+          dreamingSchedule.remove(params),
+        ]);
+      },
+    };
+
+    const dreamingLogger = this.logger.get('dreaming');
+    const shortTermMemoryService = new ShortTermMemoryService({
+      getClient: () =>
+        coreStart.dataStreams.initializeClient<ShortTermMemoryMappings, ShortTermMemory>(
+          SHORT_TERM_MEMORY_DATA_STREAM
+        ),
+      esClient: this.esClient,
+    });
+    this.shortTermMemoryService = shortTermMemoryService;
+    this.dreamingRunProgress = new DreamingRunProgress({
+      esClient: this.esClient,
+      logger: dreamingLogger,
+    });
+    this.dreamingService = new DreamingService({
+      aiIndexService,
+      shortTermMemory: shortTermMemoryService,
+      runProgress: this.dreamingRunProgress,
+      logger: dreamingLogger,
     });
 
     const soClient = coreStart.savedObjects.createInternalRepository();
@@ -453,6 +544,16 @@ export class ContextEnginePlugin
       getAiIndexDataReadService: (params) => createAiIndexDataReadService(params),
       getSignalsService: () => signalsService,
       getImprovementsService: (esClient, spaceId) => createImprovementsService(esClient, spaceId),
+      getShortTermMemoryService: () => shortTermMemoryService,
+      forgetMemory: (spaceId, memoryId) =>
+        forgetMemory({
+          spaceId,
+          memoryId,
+          shortTermMemory: shortTermMemoryService,
+          aiIndexService,
+          esClient: coreStart.elasticsearch.client.asInternalUser,
+          logger: dreamingLogger,
+        }),
     };
   }
 
