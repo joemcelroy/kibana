@@ -449,6 +449,69 @@ These started as open questions; the implementation picks these values, and they
   characters turned into `-`, and capped at 96 characters (a hash is used if nothing is left).
 - Run-progress documents are deleted on commit, and any left over are removed after 7 days.
 
+## Testing
+
+Unit tests cover each piece (`plan_run`, `graphify`, `apply`, `state`, `resolve_change_set`, the
+routes and the agent tools). The end-to-end happy path is tested with a customer support agent
+that answers questions about an airline loyalty program, remembers what it learns, and has two AI
+indices dream over the same short-term memories with different configs.
+
+### Setup
+
+- Kibana with Context Engine, `contextEngine:memoryEnabled` and workflows enabled.
+- An LLM connector as the default AI connector, so the `context_engine` feature resolves to it.
+- The airline loyalty data set from orca, seeded with `.tmp/airline/seed.py`:
+  `customer_loyalty_history` (one document per member) and `customer_flight_activity` (one
+  document per member and month).
+- Two AI indices, both with `memory_enabled: true`, each with a different dreaming config:
+
+| AI index | Remembers | `group_by` | Topology |
+|---|---|---|---|
+| `support-customers` | Individual members: who they are, what they prefer, their open issues, and what support promised them. Ignores program-wide statistics. | `session_id` | A star per member. The `member` entity (`loyalty_number`, `loyalty_card`, `province`, `city`) is linked by `opened` to `support_case` entities. Facts: `preference`, `issue`, `commitment`. |
+| `support-insights` | Program-wide knowledge: computed statistics, how to compute them, and data caveats. Ignores anything about one member. | `user_id` | A small graph of program concepts. `loyalty_tier`, `metric` and `region` entities, with `ranks_above` (tier to tier) and `measured_by` (tier to metric) relationships. Facts: `statistic`, `method`, `data_caveat`. |
+
+`support-customers` dreams per conversation, because one session is one customer contact.
+`support-insights` dreams by user. Its memories have no `user_id`, so they form one `_shared` group
+and are consolidated across sessions.
+
+### Harness
+
+The harness lives in orca at `harnesses/memory_dreaming` and runs with
+`uv run python run.py [all|setup|remember|dream|recall]`.
+A LangChain deep agent (`deepagents`) plays the support agent. It reaches Kibana through the Agent
+Builder MCP server (`/api/agent_builder/mcp?namespace=platform.context_engine,platform.core`) and
+uses:
+
+- `platform.core.execute_esql` to compute answers over the airline data,
+- `platform.context_engine.query_ai_indices` and `describe_ai_index` to recall long-term memory
+  from the two AI indices,
+- `platform.context_engine.remember` to record what it learned. The harness passes the
+  `sessionId` returned by the first call in a conversation to the later calls, so each
+  conversation is one session.
+
+Each conversation is a member asking one question from the orca `airline_loyalty_qa` golden set,
+with personal details (loyalty number, card, city, a preference or complaint) taken from that
+member's record.
+
+### Flow and checks
+
+1. **Remember.** Run the conversations. Check that every `remember` call returned an id and that
+   each id is in `.contextengine-memory-short-term` with the conversation's `session_id`.
+2. **Dream.** `PUT _dreaming` on both AI indices, then `POST _dream` on each, and poll the workflow
+   execution until it finishes. Check that:
+   - the execution succeeded and `state.cursor` moved to the last memory, with `retry` empty;
+   - `support-customers` holds `entity.member` entities and `memory.long_term.preference` or
+     `issue` facts, and no `memory.long_term.statistic` facts;
+   - `support-insights` holds `entity.loyalty_tier` entities and `memory.long_term.statistic`
+     facts, and no `entity.member` entities;
+   - every long-term KI has a `derived_from` reference to a short-term memory and an
+     `observed_in` reference to its session, and facts have `about` references to an entity;
+   - a second `POST _dream` with no new memories writes nothing.
+3. **Recall.** Ask the same questions in new conversations, without access to `execute_esql`.
+   Score the answers against `expected_output` with an LLM judge. Answers recalled from
+   `support-insights` should match the answers first computed from the data, and a returning
+   member should be recognized from `support-customers`.
+
 ## Open questions
 
 - The Elasticsearch change to `ai-index@mappings` described in
