@@ -7,10 +7,11 @@
 
 import type { KiLifecycleStatus } from '../../../common/step_types/ki';
 
-export type KiStatus = 'active' | 'deleted' | 'expired';
+export type KiStatus = 'active' | 'stale' | 'deleted' | 'expired';
 
 export const KI_STATUS_BADGE_COLOR: Record<KiStatus, 'success' | 'danger' | 'warning'> = {
   active: 'success',
+  stale: 'warning',
   deleted: 'danger',
   expired: 'warning',
 };
@@ -27,8 +28,8 @@ export const resolveKiStatus = (
   lifecycleStatus?: KiLifecycleStatus,
   expiresAt?: string
 ): KiStatus => {
-  if (lifecycleStatus === 'deleted') {
-    return 'deleted';
+  if (lifecycleStatus === 'deleted' || lifecycleStatus === 'stale') {
+    return lifecycleStatus;
   }
   if (isKiExpired(expiresAt)) {
     return 'expired';

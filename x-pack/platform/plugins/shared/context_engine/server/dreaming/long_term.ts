@@ -13,8 +13,6 @@ import type { KiReferenceRelation } from '../../common/step_types/ki';
 import { isKiDeleted, type StoredKi } from '../ai_indices/ki_revision';
 import { memoryIdFromUri, memoryUri, ownerIdPrefix } from './ids';
 
-/** Set on a KI whose source memory was forgotten, until a run re-evaluates it. */
-export const STALE_ATTRIBUTE = 'dreaming.stale';
 export const USER_ATTRIBUTE = 'memory.user_id';
 export const ENTITY_ATTRIBUTE_PREFIX = 'entity.';
 
@@ -143,7 +141,8 @@ export const findKisDerivedFrom = ({
   });
 };
 
-export const isStale = (ki: DreamedKi): boolean => ki.attributes?.[STALE_ATTRIBUTE] === true;
+/** Whether a forgotten source left the KI hidden from recall until a run re-evaluates it. */
+export const isStale = (ki: DreamedKi): boolean => ki.governance?.lifecycle?.status === 'stale';
 
 /** The short-term memories a KI was derived from. */
 export const citedMemoryIds = (ki: DreamedKi): string[] =>

@@ -322,8 +322,8 @@ apiTest.describe('context engine AI index describe API', { tag: tags.stateful.cl
           'Memory writes are enabled for this AI-index registry entry.',
           'memory.session',
           'memory.session_fact',
-          'Use platform.context_engine.remember to write memory.',
-          'Use platform.context_engine.forget with a memory id to tombstone memory.',
+          'Use platform.context_engine.remember to record session memory. It goes to short-term memory, which dreaming turns into long-term memory.',
+          'Use platform.context_engine.forget with the id remember returned to delete a short-term memory.',
         ])
       );
       expect(sectionLines(block, 'Knowledge item types')).toStrictEqual([
@@ -351,7 +351,7 @@ apiTest.describe('context engine AI index describe API', { tag: tags.stateful.cl
         `FROM ${INDEX_A} METADATA _id, _index, _score\n` +
           '| WHERE governance.lifecycle.status IS NULL OR governance.lifecycle.status == "active"\n' +
           '| WHERE expires_at IS NULL OR expires_at > NOW()\n' +
-          '| WHERE type IS NULL OR (type != "memory.session" AND type != "memory.session_fact")\n' +
+          '| WHERE type IS NULL OR (type != "memory.session" AND type != "memory.session_fact" AND NOT type LIKE "memory.long_term.*")\n' +
           '| FORK\n'
       )
     ).toBe(true);

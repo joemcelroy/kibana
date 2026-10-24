@@ -53,7 +53,7 @@ export const getViewKiHeaderBadges = (
           }),
         ]
       : []),
-    ...(kiStatus === 'deleted' || kiStatus === 'expired'
+    ...(kiStatus !== 'active'
       ? [
           customAppHeaderBadge({
             label: kiStatus,

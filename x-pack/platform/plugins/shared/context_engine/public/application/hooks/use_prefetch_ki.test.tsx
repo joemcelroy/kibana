@@ -49,7 +49,7 @@ describe('usePrefetchKi', () => {
           'ki',
           'ai-index-idx-sample-ki',
           'ki-1',
-          'active,deleted',
+          'active,stale,deleted',
         ],
       })
     );
@@ -67,7 +67,7 @@ describe('usePrefetchKi', () => {
         'ki',
         'ai-index-idx-sample-ki',
         'ki-1',
-        'active,deleted',
+        'active,stale,deleted',
       ],
       { id: 'ki-1', document: { title: 'Cached' } }
     );

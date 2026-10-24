@@ -7,6 +7,7 @@
 
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import { kiLifecyclePipeline } from './ki_lifecycle';
+import { LONG_TERM_FACT_TYPE_PREFIX } from '../../common/dreaming';
 import { MEMORY_KI_TYPES } from '../../common/memory';
 
 export interface AiIndexExampleQuery {
@@ -16,9 +17,11 @@ export interface AiIndexExampleQuery {
 }
 
 const KEEP = '| KEEP title, description, content, type, tags';
-export const EXCLUDE_MEMORY_KI_TYPES_CONDITION = `type IS NULL OR (${MEMORY_KI_TYPES.map(
-  (type) => `type != "${type}"`
-).join(' AND ')})`;
+export const LONG_TERM_FACT_TYPE_PATTERN = `${LONG_TERM_FACT_TYPE_PREFIX}*`;
+export const EXCLUDE_MEMORY_KI_TYPES_CONDITION = `type IS NULL OR (${[
+  ...MEMORY_KI_TYPES.map((type) => `type != "${type}"`),
+  `NOT type LIKE "${LONG_TERM_FACT_TYPE_PATTERN}"`,
+].join(' AND ')})`;
 export const EXCLUDE_MEMORY_KI_TYPES_FILTER = `| WHERE ${EXCLUDE_MEMORY_KI_TYPES_CONDITION}`;
 
 /**

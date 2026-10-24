@@ -22,9 +22,9 @@ import { softDeleteKi } from '../ai_indices/ki_write';
 import { kiUri, memoryUri, sessionUri } from './ids';
 import {
   ENTITY_ATTRIBUTE_PREFIX,
-  STALE_ATTRIBUTE,
   USER_ATTRIBUTE,
   citedMemoryIds,
+  isStale,
   type DreamedKi,
   type DreamedKiAttributes,
   type DreamedKiReference,
@@ -104,11 +104,6 @@ export const addReferences = (
   return references.slice(-MAX_KI_REFERENCES);
 };
 
-export const withoutStale = (attributes: DreamedKiAttributes | undefined): DreamedKiAttributes => {
-  const { [STALE_ATTRIBUTE]: _stale, ...rest } = attributes ?? {};
-  return rest;
-};
-
 const sourceReferences = (sourceMemoryIds: readonly string[]): DreamedKiReference[] =>
   sourceMemoryIds.map((id) => ({ uri: memoryUri(id), relation: 'derived_from' }));
 
@@ -117,6 +112,9 @@ const sessionReferences = (sessionIds: readonly string[]): DreamedKiReference[] 
 
 type BuildDocument = (current: DreamedKi | undefined) => Omit<DreamedKi, 'governance'> | undefined;
 
+/** The lifecycle status a write leaves: `keep` leaves a stale KI stale and anything else active. */
+type WriteStatus = 'active' | 'stale' | 'keep';
+
 /**
  * Writes a whole new revision of a KI built from its current one, retrying on a concurrent
  * write. `build` returning `undefined` skips the write.
@@ -124,7 +122,8 @@ type BuildDocument = (current: DreamedKi | undefined) => Omit<DreamedKi, 'govern
 const writeDocument = async (
   { esClient, aiIndexId, dest, writer, abortSignal }: ApplyContext,
   kiId: string,
-  build: BuildDocument
+  build: BuildDocument,
+  status: WriteStatus = 'active'
 ): Promise<'created' | 'updated' | 'skipped'> =>
   pRetry(
     async () => {
@@ -158,7 +157,12 @@ const writeDocument = async (
               created_by: current?.governance?.provenance?.created_by ?? writer,
               updated_by: writer,
             },
-            lifecycle: { status: 'active' },
+            lifecycle: {
+              status:
+                status === 'stale' || (status === 'keep' && current && isStale(current))
+                  ? 'stale'
+                  : 'active',
+            },
           },
         } satisfies StoredKi,
         existing: dest.type === 'data_stream' ? undefined : revision,
@@ -188,7 +192,7 @@ const upsertEntity = (context: ApplyContext, operation: UpsertEntityOperation) =
     title: operation.name,
     ...(operation.description !== undefined && { description: operation.description }),
     attributes: {
-      ...withoutStale(current?.attributes),
+      ...current?.attributes,
       ...Object.fromEntries(
         Object.entries(operation.attributes).map(([key, value]) => [
           `${ENTITY_ATTRIBUTE_PREFIX}${key}`,
@@ -216,7 +220,7 @@ const upsertFact = (context: ApplyContext, operation: UpsertFactOperation) =>
       type: `${LONG_TERM_FACT_TYPE_PREFIX}${operation.type}`,
       title: operation.title,
       content: operation.content,
-      attributes: { ...withoutStale(current?.attributes), ...userAttributes(context.userId) },
+      attributes: { ...current?.attributes, ...userAttributes(context.userId) },
       references: addReferences(kept, [
         ...(about ?? []).map((id) => ({ uri: kiUri(id), relation: 'about' as const })),
         ...sourceReferences(operation.sourceMemoryIds),
@@ -226,32 +230,33 @@ const upsertFact = (context: ApplyContext, operation: UpsertFactOperation) =>
   });
 
 const applyRelationship = (context: ApplyContext, operation: RelationshipOperation) =>
-  writeDocument(context, operation.sourceId, (current) => {
-    if (!current) {
-      return undefined;
-    }
-    const relationship: DreamedKiReference = {
-      uri: kiUri(operation.targetId),
-      relation: 'relates_to',
-      type: operation.type,
-    };
-    const references = operation.remove
-      ? current.references?.filter(
-          (reference) => referenceKey(reference) !== referenceKey(relationship)
-        )
-      : addReferences(current.references, [
-          relationship,
-          ...sourceReferences(operation.sourceMemoryIds),
-        ]);
-    return { ...current, references };
-  });
+  writeDocument(
+    context,
+    operation.sourceId,
+    (current) => {
+      if (!current) {
+        return undefined;
+      }
+      const relationship: DreamedKiReference = {
+        uri: kiUri(operation.targetId),
+        relation: 'relates_to',
+        type: operation.type,
+      };
+      const references = operation.remove
+        ? current.references?.filter(
+            (reference) => referenceKey(reference) !== referenceKey(relationship)
+          )
+        : addReferences(current.references, [
+            relationship,
+            ...sourceReferences(operation.sourceMemoryIds),
+          ]);
+      return { ...current, references };
+    },
+    'keep'
+  );
 
 const clearStale = (context: ApplyContext, kiId: string) =>
-  writeDocument(context, kiId, (current) =>
-    current?.attributes?.[STALE_ATTRIBUTE] === undefined
-      ? undefined
-      : { ...current, attributes: withoutStale(current.attributes) }
-  );
+  writeDocument(context, kiId, (current) => (current && isStale(current) ? current : undefined));
 
 /** Drops `derived_from` references to the given forgotten memories from a KI. */
 export const pruneSources = (
@@ -259,33 +264,38 @@ export const pruneSources = (
   kiId: string,
   forgottenMemoryIds: ReadonlySet<string>
 ) =>
-  writeDocument(context, kiId, (current) =>
-    current
-      ? {
-          ...current,
-          references: current.references?.filter(
-            ({ uri, relation }) =>
-              relation !== 'derived_from' ||
-              ![...forgottenMemoryIds].some((id) => uri === memoryUri(id))
-          ),
-        }
-      : undefined
+  writeDocument(
+    context,
+    kiId,
+    (current) =>
+      current
+        ? {
+            ...current,
+            references: current.references?.filter(
+              ({ uri, relation }) =>
+                relation !== 'derived_from' ||
+                ![...forgottenMemoryIds].some((id) => uri === memoryUri(id))
+            ),
+          }
+        : undefined,
+    'keep'
   );
 
 /**
- * Flags a KI stale if its current revision still cites `memoryId`. Returns whether it did.
- * The check is on the current revision because a search on `references.uri` can match an older
- * one.
+ * Marks a KI stale, which hides it from recall, if its current revision still cites `memoryId`.
+ * Returns whether it did. The check is on the current revision because a search on
+ * `references.uri` can match an older one.
  */
 export const markStale = async (
   context: ApplyContext,
   kiId: string,
   memoryId: string
 ): Promise<boolean> =>
-  (await writeDocument(context, kiId, (current) =>
-    current && citedMemoryIds(current).includes(memoryId)
-      ? { ...current, attributes: { ...current.attributes, [STALE_ATTRIBUTE]: true } }
-      : undefined
+  (await writeDocument(
+    context,
+    kiId,
+    (current) => (current && citedMemoryIds(current).includes(memoryId) ? current : undefined),
+    'stale'
   )) !== 'skipped';
 
 export const deleteKi = async (context: ApplyContext, kiId: string): Promise<void> => {

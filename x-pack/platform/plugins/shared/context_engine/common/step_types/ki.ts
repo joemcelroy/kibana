@@ -33,7 +33,8 @@ export const KI_REFERENCE_RELATIONS = [
   'about',
   'observed_in',
 ] as const;
-export const KI_LIFECYCLE_STATUSES = ['active', 'deleted'] as const;
+/** `stale`: a KI dreaming derived from a forgotten memory, hidden from recall until re-dreamed. */
+export const KI_LIFECYCLE_STATUSES = ['active', 'stale', 'deleted'] as const;
 
 export const aiIndexIdSchema = z
   .string()

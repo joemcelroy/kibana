@@ -11,7 +11,7 @@ import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
 import { applyOperations, deleteKi, pruneSources } from './apply';
 import { DreamingTaskNotFoundError, InvalidChangeSetError } from './errors';
 import { graphifyTask, type GraphifyParams } from './graphify';
-import { findKisDerivedFrom, loadOwnerKis, STALE_ATTRIBUTE, USER_ATTRIBUTE } from './long_term';
+import { findKisDerivedFrom, loadOwnerKis, USER_ATTRIBUTE } from './long_term';
 import type { DreamingRunProgress, DreamingTask } from './run_progress';
 
 jest.mock('./apply', () => ({
@@ -198,7 +198,8 @@ describe('graphifyTask', () => {
       id,
       type: 'memory.long_term.fact',
       title: id,
-      attributes: { [STALE_ATTRIBUTE]: true, [USER_ATTRIBUTE]: 'alice' },
+      attributes: { [USER_ATTRIBUTE]: 'alice' },
+      governance: { lifecycle: { status: 'stale' as const } },
       references: sources.map((source) => ({
         uri: `memory://${source}`,
         relation: 'derived_from' as const,

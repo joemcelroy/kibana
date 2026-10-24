@@ -7,7 +7,6 @@
 
 import { changeSetSchema, type DreamingChangeSet } from './change_set';
 import type { DreamedKi } from './long_term';
-import { STALE_ATTRIBUTE } from './long_term';
 import {
   resolveChangeSet,
   vocabularyOf,
@@ -230,7 +229,7 @@ describe('resolveChangeSet', () => {
   });
 
   it('clears the stale flag on stale KIs the model left out', () => {
-    const stale: DreamedKi = { ...existingFact, attributes: { [STALE_ATTRIBUTE]: true } };
+    const stale: DreamedKi = { ...existingFact, governance: { lifecycle: { status: 'stale' } } };
     const { operations } = resolveChangeSet(
       changeSet({}),
       context({ existing: new Map([[stale.id, stale]]) })

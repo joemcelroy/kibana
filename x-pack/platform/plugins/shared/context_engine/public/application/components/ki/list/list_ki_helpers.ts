@@ -39,6 +39,10 @@ export const getListKiStatusFilterLabel = (status: KiLifecycleStatus): string =>
       return i18n.translate('xpack.contextEngine.aiIndexDetail.listKi.statusActive', {
         defaultMessage: 'Active',
       });
+    case 'stale':
+      return i18n.translate('xpack.contextEngine.aiIndexDetail.listKi.statusStale', {
+        defaultMessage: 'Stale',
+      });
     case 'deleted':
       return i18n.translate('xpack.contextEngine.aiIndexDetail.listKi.statusDeleted', {
         defaultMessage: 'Deleted',

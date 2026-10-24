@@ -39,6 +39,14 @@ Writes:
   write-access checks. Short-term memory is append-only.
 - `forget` deletes a memory (see [Forget](#forget)).
 
+The Agent Builder tools `platform.context_engine.remember` and `platform.context_engine.forget`
+write through the plugin start contract (`getShortTermMemoryService`, `forgetMemory`):
+
+- `remember` takes `content`, plus `sessionId` for MCP calls (Agent Builder uses the
+  conversation id). With `aboutUser: true` it records the caller's profile uid (or username) as
+  `user_id`; otherwise the memory is shared. It returns `{ id, sessionId }`.
+- `forget` takes the memory `id`. It refuses to forget a memory recorded about another user.
+
 Short-term memory can't be recalled in this version.
 
 ## Dreaming config and state
@@ -364,11 +372,16 @@ Before calling the model, `graphify` does the following with stale KIs:
 2. Soft-deletes any KI left with no `derived_from` references, without involving the model.
 3. Sends the rest to the model with `stale: true`.
 
-After the change set is applied, any stale KI the model didn't touch has its stale flag cleared
-and is kept as it is.
+After the change set is applied, any stale KI the model didn't touch is made `active` again and
+is kept as it is. A KI the model rewrites becomes `active`; a relationship change alone leaves its
+source entity's status as it was.
 
 #### Changes to the KI schema
 
+- Add a `stale` value to `governance.lifecycle.status` (`active | stale | deleted`). The lifecycle
+  filter Context Engine adds to every ES|QL query on a registered AI index keeps only `active`
+  (or missing) statuses, so recall leaves out stale KIs without any extra filter. A flattened
+  `attributes` flag wouldn't work, because ES|QL can't filter on flattened subfields.
 - Add `about` and `observed_in` to `KI_REFERENCE_RELATIONS`.
 - Add an optional bounded keyword `type` to `kiReferenceSchema`, for configured relationship
   types.
@@ -386,7 +399,7 @@ and is kept as it is.
 1. Delete the short-term memory.
 2. Find long-term KIs whose `derived_from` includes that memory id, across the space's AI indices
    that have dreaming turned on.
-3. Mark those KIs `dreaming.stale`. Recall leaves out stale KIs.
+3. Set those KIs' lifecycle status to `stale`. Recall leaves out stale KIs.
 4. Add the group to `retry` on every AI index that held one of those KIs, with `from` set to just
    before the forgotten memory.
 
@@ -420,4 +433,4 @@ These started as open questions; the implementation picks these values, and they
 
 - Whether the `ai-index@mappings` template maps `references.relation` as a plain keyword, and
   whether a `references.type` field can be added. The template isn't defined in this plugin.
-- Recall doesn't yet leave out KIs marked `dreaming.stale`.
+- Telemetry still counts stale KIs as active.

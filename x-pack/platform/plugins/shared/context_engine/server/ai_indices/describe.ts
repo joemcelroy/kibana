@@ -7,6 +7,7 @@
 
 import type { ElasticsearchClient } from '@kbn/core/server';
 import type { AiIndexHttpItem, KiTypeCount } from '../../common/http_api/ai_indices';
+import { LONG_TERM_FACT_TYPE_PREFIX } from '../../common/dreaming';
 import { MEMORY_KI_TYPES } from '../../common/memory';
 import { describeAiIndexAggregations } from './describe_aggregations';
 import { describeAiIndexFields } from './describe_fields';
@@ -57,7 +58,9 @@ const kiTypeCountsSection = (counts: KiTypeCount[]): string[] =>
   countsSection(
     'Knowledge item types',
     counts
-      .filter(({ type }) => !MEMORY_KI_TYPE_SET.has(type))
+      .filter(
+        ({ type }) => !MEMORY_KI_TYPE_SET.has(type) && !type.startsWith(LONG_TERM_FACT_TYPE_PREFIX)
+      )
       .map(({ type, count }) => [type, count])
   );
 
@@ -83,8 +86,9 @@ const memorySection = (
     'Available memory types',
     'memory.session',
     'memory.session_fact',
-    'Use platform.context_engine.remember to write memory.',
-    'Use platform.context_engine.forget with a memory id to tombstone memory.',
+    `${LONG_TERM_FACT_TYPE_PREFIX}<fact type>, written by dreaming, with entity.<entity type> KIs they are about`,
+    'Use platform.context_engine.remember to record session memory. It goes to short-term memory, which dreaming turns into long-term memory.',
+    'Use platform.context_engine.forget with the id remember returned to delete a short-term memory.',
     'Unless the task specifically calls for memory, exclude memory types from ordinary KI retrieval:',
     EXCLUDE_MEMORY_KI_TYPES_FILTER,
     'For cross-session recall, search granular facts with hybrid retrieval:',
