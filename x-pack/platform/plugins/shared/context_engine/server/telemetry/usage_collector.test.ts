@@ -35,7 +35,7 @@ const probeResponse = (columns: string[]) => ({
 });
 
 const zeroStats = { total: 0, max: 0, min: 0, avg: 0 };
-const zeroKiStats = { active: zeroStats, expired: zeroStats, deleted: zeroStats };
+const zeroKiStats = { active: zeroStats, expired: zeroStats, stale: zeroStats, deleted: zeroStats };
 
 const countsResponse = (counts: Record<string, number>) => ({
   columns: [
@@ -99,7 +99,7 @@ describe('context_engine usage collector', () => {
       { id: 'c', space: 'third', managed: false, dest: { type: 'index', value: 'ai-index-idx-c' } },
     ]);
     esqlResponses.set('ai-index-idx-a', { counts: { active: 3, deleted: 1 } });
-    esqlResponses.set('ai-index-ds-b', { counts: { active: 2, expired: 4 } });
+    esqlResponses.set('ai-index-ds-b', { counts: { active: 2, expired: 4, stale: 3 } });
     esqlResponses.set('ai-index-idx-c', { counts: { active: 4, expired: 2, deleted: 2 } });
 
     const usage = await fetch();
@@ -113,6 +113,7 @@ describe('context_engine usage collector', () => {
         user: {
           active: { total: 9, max: 4, min: 2, avg: 3 },
           expired: { total: 6, max: 4, min: 0, avg: 2 },
+          stale: { total: 3, max: 3, min: 0, avg: 1 },
           deleted: { total: 3, max: 2, min: 0, avg: 1 },
         },
         managed: zeroKiStats,
@@ -137,12 +138,13 @@ describe('context_engine usage collector', () => {
         managed: {
           active: { total: 7, max: 7, min: 7, avg: 7 },
           expired: zeroStats,
+          stale: zeroStats,
           deleted: zeroStats,
         },
       },
     });
     expect(esClient.esql.query).not.toHaveBeenCalledWith(
-      expect.objectContaining({ query: expect.stringContaining('stale') })
+      expect.objectContaining({ query: expect.stringContaining('FROM "stale"') })
     );
   });
 
@@ -171,6 +173,7 @@ describe('context_engine usage collector', () => {
         user: {
           active: { total: 1, max: 1, min: 1, avg: 1 },
           expired: zeroStats,
+          stale: zeroStats,
           deleted: zeroStats,
         },
         managed: zeroKiStats,

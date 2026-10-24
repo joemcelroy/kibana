@@ -11349,6 +11349,34 @@
                     }
                   }
                 },
+                "stale": {
+                  "properties": {
+                    "total": {
+                      "type": "long",
+                      "_meta": {
+                        "description": "Number of KIs with lifecycle status stale (awaiting re-dreaming) in user-created AI indices"
+                      }
+                    },
+                    "max": {
+                      "type": "long",
+                      "_meta": {
+                        "description": "Most KIs with lifecycle status stale in one user-created AI index"
+                      }
+                    },
+                    "min": {
+                      "type": "long",
+                      "_meta": {
+                        "description": "Fewest KIs with lifecycle status stale in one user-created AI index"
+                      }
+                    },
+                    "avg": {
+                      "type": "float",
+                      "_meta": {
+                        "description": "Average KIs with lifecycle status stale per user-created AI index"
+                      }
+                    }
+                  }
+                },
                 "deleted": {
                   "properties": {
                     "total": {
@@ -11433,6 +11461,34 @@
                       "type": "float",
                       "_meta": {
                         "description": "Average active KIs past their expires_at per managed AI index"
+                      }
+                    }
+                  }
+                },
+                "stale": {
+                  "properties": {
+                    "total": {
+                      "type": "long",
+                      "_meta": {
+                        "description": "Number of KIs with lifecycle status stale (awaiting re-dreaming) in managed AI indices"
+                      }
+                    },
+                    "max": {
+                      "type": "long",
+                      "_meta": {
+                        "description": "Most KIs with lifecycle status stale in one managed AI index"
+                      }
+                    },
+                    "min": {
+                      "type": "long",
+                      "_meta": {
+                        "description": "Fewest KIs with lifecycle status stale in one managed AI index"
+                      }
+                    },
+                    "avg": {
+                      "type": "float",
+                      "_meta": {
+                        "description": "Average KIs with lifecycle status stale per managed AI index"
                       }
                     }
                   }

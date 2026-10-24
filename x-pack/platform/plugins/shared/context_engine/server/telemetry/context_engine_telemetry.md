@@ -75,9 +75,10 @@ KI counts use the latest revision of each KI, the same collapse the KI list appl
 | `ai_indices.user` | Number of user-created AI indices across all spaces. |
 | `ai_indices.managed` | Number of managed AI index entries across all spaces, one per space the managed AI index is bootstrapped in. |
 | `kis.user.active.total` / `kis.managed.active.total` | KIs whose lifecycle status is `active` or unset and whose `expires_at` is unset or in the future. |
-| `kis.user.expired.total` / `kis.managed.expired.total` | KIs that are not deleted and whose `expires_at` has passed. |
+| `kis.user.expired.total` / `kis.managed.expired.total` | KIs that are neither deleted nor stale and whose `expires_at` has passed. |
+| `kis.user.stale.total` / `kis.managed.stale.total` | KIs whose lifecycle status is `stale`: dreamed from a forgotten short-term memory and waiting to be re-dreamed. |
 | `kis.user.deleted.total` / `kis.managed.deleted.total` | KIs whose lifecycle status is `deleted`. |
-| `kis.<user\|managed>.<active\|expired\|deleted>.<max\|min\|avg>` | Spread of the matching count across that owner's dests. A dest that fails to count is left out. |
+| `kis.<user\|managed>.<active\|expired\|stale\|deleted>.<max\|min\|avg>` | Spread of the matching count across that owner's dests. A dest that fails to count is left out. |
 
 ## Logs
 

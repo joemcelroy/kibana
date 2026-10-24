@@ -21,12 +21,13 @@ const COUNT_KIS_CONCURRENCY = 5;
 /** How long to wait on one backing index before giving up on it. */
 const ESQL_REQUEST_TIMEOUT_MS = 30_000;
 
-const KI_LIFECYCLE_BUCKETS = ['active', 'expired', 'deleted'] as const;
+const KI_LIFECYCLE_BUCKETS = ['active', 'expired', 'stale', 'deleted'] as const;
 type KiLifecycleBucket = (typeof KI_LIFECYCLE_BUCKETS)[number];
 
 interface KiLifecycleCounts {
   active: number;
   expired: number;
+  stale: number;
   deleted: number;
 }
 
@@ -40,6 +41,7 @@ interface KiBucketStats {
 interface KiStats {
   active: KiBucketStats;
   expired: KiBucketStats;
+  stale: KiBucketStats;
   deleted: KiBucketStats;
 }
 
@@ -54,21 +56,26 @@ export interface ContextEngineUsage {
   };
 }
 
-const emptyKiCounts = (): KiLifecycleCounts => ({ active: 0, expired: 0, deleted: 0 });
+const emptyKiCounts = (): KiLifecycleCounts => ({ active: 0, expired: 0, stale: 0, deleted: 0 });
 
 const isKiLifecycleBucket = (value: unknown): value is KiLifecycleBucket =>
   KI_LIFECYCLE_BUCKETS.includes(value as KiLifecycleBucket);
 
 /** Counts the newest revision of each KI into a lifecycle bucket. Unmapped fields are skipped. */
 const kiLifecycleCountsQuery = (dest: AiIndexDest, columns: Set<string>): string => {
-  const status = columns.has('governance.lifecycle.status')
-    ? 'governance.lifecycle.status == "deleted"'
-    : 'false';
+  const hasStatus = (status: 'deleted' | 'stale') =>
+    columns.has('governance.lifecycle.status')
+      ? `governance.lifecycle.status == "${status}"`
+      : 'false';
   const expired = columns.has('expires_at') ? 'expires_at <= NOW()' : 'false';
   return [
     `FROM ${JSON.stringify(dest.value)} METADATA _id, _index`,
     ...latestRevisionPipeline(dest, (field) => columns.has(field)),
-    `EVAL lifecycle = CASE(COALESCE(${status}, false), "deleted", COALESCE(${expired}, false), "expired", "active")`,
+    `EVAL lifecycle = CASE(COALESCE(${hasStatus(
+      'deleted'
+    )}, false), "deleted", COALESCE(${hasStatus(
+      'stale'
+    )}, false), "stale", COALESCE(${expired}, false), "expired", "active")`,
     'STATS count = COUNT(*) BY lifecycle',
   ].join('\n| ');
 };
@@ -110,6 +117,7 @@ const bucketStats = (values: number[]): KiBucketStats => {
 const kiStats = (counts: KiLifecycleCounts[]): KiStats => ({
   active: bucketStats(counts.map(({ active }) => active)),
   expired: bucketStats(counts.map(({ expired }) => expired)),
+  stale: bucketStats(counts.map(({ stale }) => stale)),
   deleted: bucketStats(counts.map(({ deleted }) => deleted)),
 });
 
@@ -255,6 +263,33 @@ export const registerContextEngineUsageCollector = ({
               },
             },
           },
+          stale: {
+            total: {
+              type: 'long',
+              _meta: {
+                description:
+                  'Number of KIs with lifecycle status stale (awaiting re-dreaming) in user-created AI indices',
+              },
+            },
+            max: {
+              type: 'long',
+              _meta: {
+                description: 'Most KIs with lifecycle status stale in one user-created AI index',
+              },
+            },
+            min: {
+              type: 'long',
+              _meta: {
+                description: 'Fewest KIs with lifecycle status stale in one user-created AI index',
+              },
+            },
+            avg: {
+              type: 'float',
+              _meta: {
+                description: 'Average KIs with lifecycle status stale per user-created AI index',
+              },
+            },
+          },
           deleted: {
             total: {
               type: 'long',
@@ -326,6 +361,33 @@ export const registerContextEngineUsageCollector = ({
               type: 'float',
               _meta: {
                 description: 'Average active KIs past their expires_at per managed AI index',
+              },
+            },
+          },
+          stale: {
+            total: {
+              type: 'long',
+              _meta: {
+                description:
+                  'Number of KIs with lifecycle status stale (awaiting re-dreaming) in managed AI indices',
+              },
+            },
+            max: {
+              type: 'long',
+              _meta: {
+                description: 'Most KIs with lifecycle status stale in one managed AI index',
+              },
+            },
+            min: {
+              type: 'long',
+              _meta: {
+                description: 'Fewest KIs with lifecycle status stale in one managed AI index',
+              },
+            },
+            avg: {
+              type: 'float',
+              _meta: {
+                description: 'Average KIs with lifecycle status stale per managed AI index',
               },
             },
           },

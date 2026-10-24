@@ -386,6 +386,26 @@ source entity's status as it was.
 - Add an optional bounded keyword `type` to `kiReferenceSchema`, for configured relationship
   types.
 
+#### Changes to the `ai-index@mappings` template (Elasticsearch)
+
+The AI index backing mappings come from the `ai-index@mappings` component template, which is
+defined in the Elasticsearch codebase, not in Kibana. Dreaming needs these from it:
+
+- **`references.type`:** a new `keyword` field. Without it, configured relationship types are
+  stored in `_source` but can't be searched or filtered.
+- **`references.relation`:** must stay a plain `keyword`, so the new `about` and `observed_in`
+  values index without a mapping change.
+- **`governance.lifecycle.status`:** already a `keyword`, so `stale` needs no mapping change.
+
+The Elasticsearch change ships separately. Until it lands, dreaming still works; only queries on
+`references.type` don't.
+
+#### Telemetry
+
+The `context_engine` usage collector counts stale KIs as their own lifecycle bucket,
+`kis.<user|managed>.stale.<total|max|min|avg>`, next to `active`, `expired` and `deleted`. A KI
+that is stale and past its `expires_at` counts as stale.
+
 ### Ordering and late writes
 
 - Tasks run one at a time. Two runs can't overlap because of the workflow's concurrency key.
@@ -431,6 +451,5 @@ These started as open questions; the implementation picks these values, and they
 
 ## Open questions
 
-- Whether the `ai-index@mappings` template maps `references.relation` as a plain keyword, and
-  whether a `references.type` field can be added. The template isn't defined in this plugin.
-- Telemetry still counts stale KIs as active.
+- The Elasticsearch change to `ai-index@mappings` described in
+  [Changes to the `ai-index@mappings` template](#changes-to-the-ai-indexmappings-template-elasticsearch).
