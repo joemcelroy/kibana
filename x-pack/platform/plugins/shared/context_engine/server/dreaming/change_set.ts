@@ -127,10 +127,14 @@ export const changeSetToolSchema = {
           ref: { type: 'string', description: refDescription },
           delete: { type: 'boolean', description: 'True deletes an existing fact.' },
           type: { type: 'string', description: 'One of the configured fact types.' },
-          title: { type: 'string', description: 'A short label for the fact.' },
+          title: {
+            type: 'string',
+            description: 'A short label for the fact that names the entities it is about.',
+          },
           content: {
             type: 'string',
-            description: 'The fact, stated so it can be used without the memories.',
+            description:
+              'The fact, stated so it can be used on its own: name the entities it is about and keep exact values.',
           },
           about: {
             type: 'array',

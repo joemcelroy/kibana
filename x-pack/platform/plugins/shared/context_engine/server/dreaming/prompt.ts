@@ -63,6 +63,8 @@ export const buildSystemPrompt = (config: AiIndexDreamingConfig): string =>
     'You are given MEMORIES (new, raw notes from conversations) and EXISTING long-term entities and facts.',
     'Return only changes. Update an existing item by repeating its id as ref with the new values; create one with a new key like "new:1"; delete one with delete: true.',
     'Merge rather than duplicate: if a memory restates or refines an existing fact, update that fact.',
+    'Facts are read without their entities, so write each one to stand alone: name the entities it is about in its title and content, and keep every number exactly as stated.',
+    'Add a relationship of a configured type whenever the memories support it, so related entities are linked.',
     'Every created or updated item must list the MEMORIES it is based on in source_memory_ids.',
     'An item marked stale lost one of its sources. Rewrite it from its remaining sources, delete it if they no longer support it, or leave it out to keep it unchanged.',
     'Ignore memories that hold nothing worth remembering. An empty change set is a valid answer.',

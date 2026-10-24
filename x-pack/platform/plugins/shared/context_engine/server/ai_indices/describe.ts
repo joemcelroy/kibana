@@ -78,7 +78,7 @@ const memorySection = (
     return [];
   }
 
-  const { crossSession } = buildMemoryExampleQueries(target);
+  const { crossSession, findEntity, factsAboutEntity } = buildMemoryExampleQueries(target);
 
   return [
     'Memory',
@@ -93,6 +93,10 @@ const memorySection = (
     EXCLUDE_MEMORY_KI_TYPES_FILTER,
     'For cross-session recall, search granular facts with hybrid retrieval:',
     crossSession,
+    'To recall what is known about one entity, such as a person, find the entity:',
+    findEntity,
+    'Then list the facts about it by its id. Facts found by search alone can be about another entity:',
+    factsAboutEntity,
     'Select the latest revision before filtering deleted or expired memories, or an older active data-stream revision can reappear.',
     'References identify the source conversations.',
   ];
