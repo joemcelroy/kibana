@@ -8,7 +8,7 @@
 import {
   DEFAULT_DREAMING_FACT_TYPE,
   ENTITY_TYPE_PREFIX,
-  LONG_TERM_FACT_TYPE_PREFIX,
+  FACT_TYPE_PREFIX,
   type AiIndexDreamingConfig,
   type DreamingRelationshipType,
 } from '../../common/dreaming';
@@ -114,7 +114,7 @@ const kindOf = (ki: DreamedKi): 'entity' | 'fact' | undefined => {
   if (ki.type.startsWith(ENTITY_TYPE_PREFIX)) {
     return 'entity';
   }
-  if (ki.type.startsWith(LONG_TERM_FACT_TYPE_PREFIX)) {
+  if (ki.type.startsWith(FACT_TYPE_PREFIX)) {
     return 'fact';
   }
   return undefined;
@@ -261,7 +261,7 @@ export const resolveChangeSet = (
       if (!current && !fact.ref.startsWith(NEW_REF_PREFIX)) {
         reject(`'${fact.ref}' is neither an existing fact nor a new key`);
       }
-      const type = fact.type ?? current?.type.slice(LONG_TERM_FACT_TYPE_PREFIX.length);
+      const type = fact.type ?? current?.type.slice(FACT_TYPE_PREFIX.length);
       const title = fact.title ?? current?.title;
       const content = fact.content ?? current?.content;
       if (!type || !title || !content) {

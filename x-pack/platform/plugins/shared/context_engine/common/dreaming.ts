@@ -18,8 +18,12 @@ export const MIN_DREAMING_INTERVAL_MINUTES = 15;
 /** Generic fact type used when the dreaming config declares none. */
 export const DEFAULT_DREAMING_FACT_TYPE = 'fact';
 
-export const LONG_TERM_FACT_TYPE_PREFIX = 'memory.long_term.';
+/** Type prefixes of the KIs dreaming writes: `fact.<fact type>` and `entity.<entity type>`. */
+export const FACT_TYPE_PREFIX = 'fact.';
 export const ENTITY_TYPE_PREFIX = 'entity.';
+
+export const isDreamedKiType = (type: string): boolean =>
+  type.startsWith(FACT_TYPE_PREFIX) || type.startsWith(ENTITY_TYPE_PREFIX);
 /** Stands in for the user in long-term ids when a memory has no `user_id`. */
 export const SHARED_MEMORY_OWNER = '_shared';
 

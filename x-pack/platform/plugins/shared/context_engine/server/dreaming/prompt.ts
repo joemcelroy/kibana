@@ -7,7 +7,7 @@
 
 import {
   ENTITY_TYPE_PREFIX,
-  LONG_TERM_FACT_TYPE_PREFIX,
+  FACT_TYPE_PREFIX,
   type AiIndexDreamingConfig,
   type ShortTermMemory,
 } from '../../common/dreaming';
@@ -78,7 +78,7 @@ const promptKi = (ki: DreamedKi) => {
   return {
     id: ki.id,
     kind: isEntity ? 'entity' : 'fact',
-    type: ki.type.slice((isEntity ? ENTITY_TYPE_PREFIX : LONG_TERM_FACT_TYPE_PREFIX).length),
+    type: ki.type.slice((isEntity ? ENTITY_TYPE_PREFIX : FACT_TYPE_PREFIX).length),
     [isEntity ? 'name' : 'title']: ki.title,
     ...(ki.description && { description: ki.description }),
     ...(ki.content && { content: truncate(ki.content, MAX_PROMPT_KI_CONTENT_LENGTH) }),

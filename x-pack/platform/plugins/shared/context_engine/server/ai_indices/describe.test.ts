@@ -195,13 +195,13 @@ describe('describeAiIndex', () => {
     expect(response).not.toContain('"memory.session": 2');
     expect(response).not.toContain('"memory.session_fact": 7');
     expect(response).toContain(
-      '| WHERE type IS NULL OR (type != "memory.session" AND type != "memory.session_fact" AND NOT type LIKE "memory.long_term.*")'
+      '| WHERE type IS NULL OR (type != "memory.session" AND type != "memory.session_fact" AND NOT type LIKE "fact.*" AND NOT type LIKE "entity.*")'
     );
     expect(response).toContain(
       [
         'For cross-session recall, search granular facts with hybrid retrieval:',
         'FROM ai-index-idx-support* METADATA _id, _index, _score',
-        '| WHERE type == "memory.session_fact" OR type LIKE "memory.long_term.*"',
+        '| WHERE type == "memory.session_fact" OR type LIKE "fact.*"',
         '| INLINE STATS latest_at = MAX(@timestamp) BY id',
         '| WHERE @timestamp == latest_at',
         '  AND (governance.lifecycle.status IS NULL OR governance.lifecycle.status == "active")',

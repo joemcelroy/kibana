@@ -7,7 +7,7 @@
 
 import pRetry from 'p-retry';
 import type { ElasticsearchClient } from '@kbn/core/server';
-import { ENTITY_TYPE_PREFIX, LONG_TERM_FACT_TYPE_PREFIX } from '../../common/dreaming';
+import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX } from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import { MAX_KI_REFERENCES } from '../../common/step_types/ki';
 import { KiConflictError, KiNotFoundError } from '../ai_indices/errors';
@@ -217,7 +217,7 @@ const upsertFact = (context: ApplyContext, operation: UpsertFactOperation) =>
     return {
       ...current,
       id: operation.id,
-      type: `${LONG_TERM_FACT_TYPE_PREFIX}${operation.type}`,
+      type: `${FACT_TYPE_PREFIX}${operation.type}`,
       title: operation.title,
       content: operation.content,
       attributes: { ...current?.attributes, ...userAttributes(context.userId) },

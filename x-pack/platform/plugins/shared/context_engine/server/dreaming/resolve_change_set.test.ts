@@ -24,7 +24,7 @@ const existingEntity: DreamedKi = {
 
 const existingFact: DreamedKi = {
   id: 'alice/fact-abc',
-  type: 'memory.long_term.preference',
+  type: 'fact.preference',
   title: 'Coffee',
   content: 'Alice drinks coffee',
   references: [{ uri: 'memory://m-old', relation: 'derived_from' }],

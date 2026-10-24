@@ -5,8 +5,7 @@
  * 2.0.
  */
 
-import { ENTITY_TYPE_PREFIX } from '../../common/dreaming';
-import { LONG_TERM_FACT_TYPE_PATTERN } from './example_queries';
+import { ENTITY_TYPE_PATTERN, FACT_TYPE_PATTERN } from './example_queries';
 
 export interface MemoryExampleQueries {
   crossSession: string;
@@ -25,7 +24,7 @@ const latestActiveRevision = [
 export const buildMemoryExampleQueries = (target: string): MemoryExampleQueries => ({
   crossSession: [
     `FROM ${target} METADATA _id, _index, _score`,
-    `| WHERE type == "memory.session_fact" OR type LIKE "${LONG_TERM_FACT_TYPE_PATTERN}"`,
+    `| WHERE type == "memory.session_fact" OR type LIKE "${FACT_TYPE_PATTERN}"`,
     ...latestActiveRevision,
     '| FORK',
     '    ( WHERE content:"<query>" OR title:"<query>" OR description:"<query>" | SORT _score DESC | LIMIT 20 )',
@@ -37,7 +36,7 @@ export const buildMemoryExampleQueries = (target: string): MemoryExampleQueries 
   ].join('\n'),
   findEntity: [
     `FROM ${target} METADATA _id, _score`,
-    `| WHERE type LIKE "${ENTITY_TYPE_PREFIX}*"`,
+    `| WHERE type LIKE "${ENTITY_TYPE_PATTERN}"`,
     ...latestActiveRevision,
     '| WHERE title:"<name>" OR description:"<name>"',
     '| SORT _score DESC, _id ASC',
@@ -46,7 +45,7 @@ export const buildMemoryExampleQueries = (target: string): MemoryExampleQueries 
   ].join('\n'),
   factsAboutEntity: [
     `FROM ${target} METADATA _id`,
-    `| WHERE type LIKE "${LONG_TERM_FACT_TYPE_PATTERN}"`,
+    `| WHERE type LIKE "${FACT_TYPE_PATTERN}"`,
     ...latestActiveRevision,
     '| WHERE MV_CONTAINS(references.uri, "ki://<entity id>")',
     '| SORT updated_at DESC, _id ASC',

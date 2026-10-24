@@ -272,6 +272,9 @@ and provenance, and validates everything before it saves the plan.
 - The task's short-term memories, each with its id.
 - The user's existing entities and facts, each with its id, type, current fields, and a `stale`
   flag.
+- Rules that facts stand alone, naming the entities they are about and keeping exact values,
+  because recall reads facts without their entities. The model should also link entities with
+  the configured relationship types whenever the memories support it.
 
 #### What the model returns
 
@@ -294,7 +297,7 @@ interface DreamingChangeSet {
   facts: Array<{
     ref: string;                 // an existing fact id, or a new key like "new:1"
     delete?: boolean;            // true deletes an existing fact
-    type?: string;               // a configured fact type, without the "memory.long_term." prefix
+    type?: string;               // a configured fact type, without the "fact." prefix
     title?: string;
     content?: string;
     about?: string[];            // entity refs, existing or new; replaces the current list
@@ -343,8 +346,13 @@ Every write goes into the AI index's backing index, through `ki_write.ts` and `k
 **Fact:**
 - **id:** `<user>/fact-<hash(execution_id, task_id, ref)>`. The hash is computed once, when the
   plan is saved, so a retry writes the same id.
-- **type:** `memory.long_term.<type>`.
+- **type:** `fact.<type>`.
 - **title**, **content**, and **attributes:** `memory.user_id`.
+
+`fact.*` and `entity.*` are the dreamed KI types. Like the session memory types, both are left
+out of ordinary KI retrieval and type counts, and are recalled through the memory queries that
+`describe_ai_index` shows. That a KI came from dreaming is recorded by its `derived_from`
+references, not by its type.
 
 **References**, added on top of whatever the KI already has:
 
@@ -484,7 +492,9 @@ uses:
 
 - `platform.core.execute_esql` to compute answers over the airline data,
 - `platform.context_engine.query_ai_indices` and `describe_ai_index` to recall long-term memory
-  from the two AI indices,
+  from the two AI indices. The describe output shows how to find an entity and list the facts
+  `about` it (`MV_CONTAINS(references.uri, "ki://<entity id>")`), so a member's facts are not
+  mixed with another member's,
 - `platform.context_engine.remember` to record what it learned. The harness passes the
   `sessionId` returned by the first call in a conversation to the later calls, so each
   conversation is one session.
@@ -500,9 +510,9 @@ member's record.
 2. **Dream.** `PUT _dreaming` on both AI indices, then `POST _dream` on each, and poll the workflow
    execution until it finishes. Check that:
    - the execution succeeded and `state.cursor` moved to the last memory, with `retry` empty;
-   - `support-customers` holds `entity.member` entities and `memory.long_term.preference` or
-     `issue` facts, and no `memory.long_term.statistic` facts;
-   - `support-insights` holds `entity.loyalty_tier` entities and `memory.long_term.statistic`
+   - `support-customers` holds `entity.member` entities and `fact.preference` or `fact.issue`
+     facts, and no `fact.statistic` facts;
+   - `support-insights` holds `entity.loyalty_tier` entities and `fact.statistic`
      facts, and no `entity.member` entities;
    - every long-term KI has a `derived_from` reference to a short-term memory and an
      `observed_in` reference to its session, and facts have `about` references to an entity;

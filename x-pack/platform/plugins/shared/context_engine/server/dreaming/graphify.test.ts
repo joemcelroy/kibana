@@ -159,7 +159,7 @@ describe('graphifyTask', () => {
     findKisDerivedFromMock.mockResolvedValue([
       {
         id: 'alice/fact-a',
-        type: 'memory.long_term.fact',
+        type: 'fact.fact',
         title: 'a',
         references: [
           { uri: 'memory://m-1', relation: 'derived_from' },
@@ -196,7 +196,7 @@ describe('graphifyTask', () => {
   it('deletes stale KIs left with no source and prunes the rest before calling the model', async () => {
     const stale = (id: string, sources: string[]) => ({
       id,
-      type: 'memory.long_term.fact',
+      type: 'fact.fact',
       title: id,
       attributes: { [USER_ATTRIBUTE]: 'alice' },
       governance: { lifecycle: { status: 'stale' as const } },

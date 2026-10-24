@@ -7,7 +7,7 @@
 
 import type { estypes } from '@elastic/elasticsearch';
 import type { ElasticsearchClient } from '@kbn/core/server';
-import { ENTITY_TYPE_PREFIX, LONG_TERM_FACT_TYPE_PREFIX } from '../../common/dreaming';
+import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX } from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import type { KiReferenceRelation } from '../../common/step_types/ki';
 import { isKiDeleted, type StoredKi } from '../ai_indices/ki_revision';
@@ -43,10 +43,7 @@ const LENIENT_INDEX_OPTIONS = { ignore_unavailable: true, allow_no_indices: true
 
 const dreamedTypeFilter: estypes.QueryDslQueryContainer = {
   bool: {
-    should: [
-      { prefix: { type: ENTITY_TYPE_PREFIX } },
-      { prefix: { type: LONG_TERM_FACT_TYPE_PREFIX } },
-    ],
+    should: [{ prefix: { type: ENTITY_TYPE_PREFIX } }, { prefix: { type: FACT_TYPE_PREFIX } }],
     minimum_should_match: 1,
   },
 };
