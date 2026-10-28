@@ -11,7 +11,7 @@ Memory has two tiers.
   dreaming on may use it.
 - **Transcripts** are a second data stream, kept apart from short-term memory: the verbatim
   transcript of a conversation round, with its `session_id`, saved through `saveTranscript`. Each
-  names the per-user AI indices it is for.
+  names the AI indices it is for: every AI index that takes conversation rounds.
 - **Long-term memory** is the existing backing index of each AI index (for example
   `ai-index-idx-ops-memory`). It holds the facts, entities, and relationships that dreaming
   produces.
@@ -39,8 +39,9 @@ dreamed by several AI indices, each tracking its own progress.
   document per conversation.
 - **Plugin-registered dreaming config:** a plugin ships the dreaming config with its managed AI
   index; an admin only turns it on.
-- **UI:** a Settings tab on each AI index shows its dreaming config and state as JSON. See
-  [UI](#ui).
+- **UI:** a Settings tab on each AI index shows its dreaming config and state as JSON, and
+  creating an AI index starts with a two-step template setup: pick an example, then review its
+  suggested ontology. See [UI](#ui).
 - **Transcripts:** a separate `.contextengine-memory-transcripts` stream, written by
   `saveTranscript`. A short-term memory carries `content` only. See [Transcripts](#transcripts).
 - **Memory API:** `remember`, `recall` and `saveTranscript` are Context Engine start contract
@@ -49,9 +50,10 @@ dreamed by several AI indices, each tracking its own progress.
   replaces the `query_ai_indices` tool. See [Memory API](#memory-api).
 
 - **Round capture:** agents that have an AI index or remember users save each completed round's
-  transcript through a global system post-execution workflow, for per-user AI indices only.
-  Every AI index that takes rounds dreams its transcripts, `user-memories` included. See
+  transcript through a global system post-execution workflow. Rounds are on by default for every
+  AI index with memory and dreaming on, shared ones included; `rounds: false` opts one out. See
   [Round capture](#round-capture).
+- **Decisions:** what was decided while building this, and why, is in [Decisions](#decisions).
 
 ## Architecture
 
@@ -379,7 +381,20 @@ The workflow steps call the same service function in-process.
 
 This calls the workflow's `manual` trigger and returns `{ run_id: <execution id> }`. If a run is
 already in progress, the new run waits for it (see [Queued runs](#queued-runs)). A targeted run
-reads its group up to now, without the settle lag.
+reads its group up to now, without the settle lag. It needs the Context Engine write privilege.
+
+From Dev Tools Console, Kibana routes take the `kbn:` prefix; the route has one version, so the
+version header can be left out:
+
+```
+POST kbn:/api/context_engine/ai_index/user-memories/_dream
+{}
+```
+
+`remember` with `dream_now: true` and `ai_index_ids` stores a memory and starts this in one
+call. The run's progress is in the workflow execution named by `run_id`
+(`.workflows-executions`), and each `graphify` step's output counts what it created, updated
+and rejected. Only a `dry_run` records why an item was rejected.
 
 ## Dreaming workflow
 
@@ -896,6 +911,13 @@ again. `graphify` already skips memories that a KI in the AI index cites through
 so this writes no duplicate facts. A memory that produced no KI isn't cited, so the model sees it
 one more time.
 
+To dream memories the cursor has already passed, for example after changing an AI index's
+dreaming template, move the cursor back with `PUT _dreaming/_state`
+(`{ reset: true, cursor: { timestamp, memory_id: '' }, retry: [] }`), then start a run. KIs made
+under the old config stay unless they are deleted first: a fact type the new config doesn't define
+is not rewritten, so to rebuild an AI index from scratch, delete its KIs, reset the cursor to the
+AI index's creation time, and dream.
+
 ### Trade-offs
 
 - **Credentials.** An immediate run executes as the caller, not as whoever saved the dreaming
@@ -964,6 +986,10 @@ means on, so existing agents, including the Elastic AI Agent, get both without a
   provides it; other type-contributed indices stay as fixed badges.
 - **The shared id.** `agentBuilderUserMemoriesAiIndexId` (`@kbn/agent-builder-common`) is the id
   Context Engine registers `user-memories` under, so the two can't drift.
+- **Managed.** Both are managed AI indices: `DELETE` and updates through the AI index API answer
+  409 (`is managed and cannot be modified via the API`). A fresh space always has both, so
+  clearing a demo means emptying their KIs and the memory streams, not deleting them. Their
+  dreaming config can still be set, as for any AI index.
 
 ### Memory API
 
@@ -1272,8 +1298,10 @@ conversations too.
 and written through `GET` and `PUT /internal/context_engine/memory/_mine/settings`
 (`{ learn_from_conversations }`), and stored under every id the user's memory can be owned by
 (profile uid and username), so it covers conversations held over the API as well. It is not kept in
-the user profile: the security plugin only accepts a fixed set of profile data keys. Turning it off
-stops capture for that user at once. The Memory page then offers to delete what was captured:
+the user profile: the security plugin only accepts a fixed set of profile data keys. It belongs to
+the user, not an agent: one switch covers every agent in the space. Turning it off
+stops capture for that user at once. It stops round capture only: `remember` still stores what an
+agent chooses to remember, and dreaming still reads it. The Memory page then offers to delete what was captured:
 `POST /internal/context_engine/memory/_mine/rounds/_forget` forgets each of the user's round
 records in the space (under their profile uid and their username), which marks the KIs made from
 them stale, as `forget` does. The start contract has the same as
@@ -1496,6 +1524,10 @@ profile. A basic-auth API call has no profile, but a browser session does, so on
 KIs under both. Reads match either id (`ownerIdsOf`): the Memory page listing, and the
 user-scoped filter on `query`. This is how Agent Builder matches conversation owners.
 
+A dreamed KI has no top-level `user_id` field: its owner is the prefix of its id. To see one
+user's memory in Dev Tools, search the AI index's backing index by id prefix, or use the Memory
+page, rather than filtering on `user_id`.
+
 ### AI index settings
 
 Each AI index page has a Settings tab (`/ai_index/{id}/settings`). Its Dreaming panel shows what
@@ -1509,8 +1541,9 @@ The UI has no per-index memory option: an AI index created in the UI has `memory
 whenever the memory feature is on, and the AI index page has no switch to turn it off (the API
 still accepts `memory_enabled`). Creating an AI index then goes to a two-step setup
 (`/ai_index/{id}/dreaming_template`) before the AI index's own onboarding. It is built from example dreaming configs: personal
-assistant, customer support, technical support, legal assistant, finance assistant, healthcare
-assistant and developer documentation.
+assistant, customer support, customer insights, technical support, legal assistant, finance
+assistant, healthcare assistant and developer documentation. No company name is asked for: the
+description is the template's `summary`, edited in place.
 
 - **Where they live.** Static JSON in the plugin's `public/assets/dreaming_templates`:
   `index.json` lists each template's id, name and description, and `<id>.json` holds its
@@ -1535,6 +1568,27 @@ assistant and developer documentation.
 - Template names, descriptions, summaries and rationales are in the JSON, so they are not
   translated.
 
+**Customer support versus customer insights.** Customer support learns from resolved tickets and
+docs: confirmed solutions, known issues, policies and workarounds. Fed with support
+conversations, it records almost nothing, because a conversation rarely confirms a fix: in the
+loyalty demo it kept 3 program-wide figures from 4 conversations and skipped every member's
+problem. Customer insights is built for those conversations. It records two kinds of knowledge:
+
+- **Customer problems:** facts `customer_problem`, `recurring_problem`, `resolution`,
+  `churn_risk` and `service_preference`, on entities `customer` (by loyalty number),
+  `problem`, `route` and `region`, with relationships `reported`, `affects`, `occurs_on`,
+  `holds`, `lives_in` and `duplicate_of`. A problem another customer reports again is added to,
+  not duplicated, so recurring problems stand out.
+- **Customer insights:** facts `program_metric`, `segment_insight` and `trend`, and the
+  `loyalty_tier` entity, for the figures the agent's queries return about the program as a whole
+  (churn, lifetime value, flights over time, enrollment, regions, demographics), each with its
+  numbers, period and scope, updated rather than duplicated.
+
+Its instructions skip a customer's address or postal code, phone, email, payment details, salary,
+gender, marital status and education, except as counts or averages across members. A shared AI
+index takes rounds, and an agent's profile lookups return those fields, so without that rule they
+landed on the customer entities. On the same four conversations it built 25 KIs.
+
 ## Accepted trade-offs
 
 - **Execution history.** `graphify` keeps memory content out of workflow state, except for
@@ -1545,6 +1599,10 @@ assistant and developer documentation.
 - **Cost.** LLM cost grows with the number of AI indices that dream times the short-term memory
   volume. Each run is bounded by the per-run memory cap.
 - **Dependency.** Dreaming requires workflows management.
+- **Shared AI indices learn from conversations.** Rounds are on by default for every AI index. A
+  round's tool results show what its user could read, so what a shared AI index dreams from them
+  is readable by everyone who reads that AI index. The dreaming instructions decide what is kept;
+  `rounds: false` keeps an AI index out.
 
 ## Defaults
 
@@ -1556,6 +1614,8 @@ These started as open questions; the implementation picks these values, and they
 - Entity name slugs are NFKD-normalized, stripped of accents, lowercased, with runs of other
   characters turned into `-`, and capped at 96 characters (a hash is used if nothing is left).
 - Run-progress documents are deleted on commit, and any left over are removed after 7 days.
+- `rounds` is on unless an AI index's dreaming config sets it to `false`. Transcripts are kept for
+  30 days, and the dreaming prompt shows at most 16,000 characters of each.
 
 ## Testing
 
@@ -1713,6 +1773,86 @@ Known gaps from the runs:
 - Dream-now runs of one AI index run one at a time, so a burst of sessions takes minutes to
   drain. Each queued run reloads the owner's KIs, even when an earlier run already dreamed its
   memories.
+
+## Decisions
+
+What was decided while building this branch, in the order it came up, with the reason and what
+was turned down.
+
+### Memory model
+
+1. **Transcripts are stored apart from short-term memory.** Short-term memory holds notes an agent
+   chose to remember (`content` only; `raw` is gone from it and from the remember tool).
+   Transcripts are verbatim rounds in their own stream, `.contextengine-memory-transcripts`.
+   *Why:* they differ in size, retention (30 days), who writes them (round capture, not the agent)
+   and who may search them. Keeping them apart keeps `remember` a simple note.
+2. **`saveTranscript` is deliberately small:** `raw` and `session_id`, plus optional `id`,
+   `occurred_at` and `attributes`. The user is always the caller.
+3. **Dreaming reads both streams, with no switch to skip transcripts.** An `ignore_rounds` option
+   was renamed `use_transcripts` (default true), then removed. *Why:* `rounds` already decides
+   whether an AI index gets transcripts at all; a second, read-side switch could only disagree
+   with it.
+4. **Rounds are on by default for every AI index, shared ones included.** `rounds: false` opts
+   one out. *Turned down:* defaulting to on only for per-user AI indices, and the earlier rule that
+   refused `rounds` on a shared AI index. *Why:* a shared AI index such as `support-cases` should
+   learn from the conversations it serves, not only from what an agent chooses to `remember`.
+   *Cost:* what a round's tool results showed its user can reach everyone who reads that AI index;
+   the dreaming instructions decide what is kept. See [Accepted trade-offs](#accepted-trade-offs).
+
+### Memory API
+
+5. **One memory API on Context Engine:** `remember`, `recall` and `saveTranscript` on the start
+   contract and as public routes (`_remember`, `_recall`, `_save_transcript`). The Agent Builder
+   tools are thin wrappers over the contract. *Why:* other clients, such as the Claude Code
+   plugin, use the same calls, and each call checks the caller's access itself. The HTTP routes are
+   the low-level surface.
+6. **Recall has two scopes:** `'ai-index'` (default) and `'short-term'`, and `ai_index_ids` names
+   specific AI indices. Transcripts are never searched. *Why:* recall serves an agent answering a
+   question; raw transcripts are input to dreaming, not answers.
+7. **Recall takes plain words or ES|QL**, told apart by parsing the query (a `FROM` or `TS` first
+   command with no parse errors). ES|QL needs `scope: 'ai-index'` and no `ai_index_ids`.
+   *Why:* one retrieval tool for agents; it replaces `query_ai_indices`, and skills now pass
+   their ES|QL to recall.
+
+### Agent Builder
+
+8. **Round capture accepts a realm id as the owner.** A conversation held over basic auth is
+   owned by a `realm:` id, while the workflow's API-key request resolved to the key creator's
+   profile uid, so every such round was skipped as `not_found`. `CurrentUser.realmId` carries the
+   creator's realm id, and conversation ownership accepts it.
+9. **User memory is global, not per agent.** The Memory page lives under Manage
+   (`/manage/memory`); each agent's Customize navigation keeps a link to the same page, showing
+   memory from every agent. *Why:* the memory is about the user; agents only add to it.
+10. **Learn from my conversations is the user's switch,** per space, across every agent. It stops
+    round capture only; `remember` keeps working.
+
+### Context Engine UI
+
+11. **Creating an AI index starts with a template, then its ontology:** pick an example
+    (sketch, description), then review its fact, entity and relationship types with a rationale.
+    No company name is asked for.
+12. **No Memory option in AI index create or settings.** Memory is on whenever the feature is.
+13. **A Customer insights template** for support conversations: customer problems and program
+    insights, with personal details kept out of a shared AI index. *Why:* the Customer support
+    template learns from resolved tickets and skipped nearly everything in live conversations. See
+    [Choosing what to learn](#choosing-what-to-learn).
+
+### Operating it
+
+14. **Managed AI indices can't be deleted.** `elastic` and `user-memories` answer 409; resetting a
+    demo means emptying their KIs and the memory and transcript streams.
+15. **Re-dreaming after a template change** means deleting the old KIs, resetting the cursor
+    with `PUT _dreaming/_state`, and dreaming. See [Re-dreaming](#re-dreaming).
+
+### Seen in the demo run
+
+- **Long analytical questions can fail.** "Which loyalty tier has the highest average CLV, and how
+  many members does it have?" on the Elastic AI Agent stopped once on the token limit and once on
+  Agent Builder's 300-second limit on the model stream, so its round was never captured.
+- **One Kibana user playing several customers** merges them into one `user-memories` profile. The
+  harness does this on purpose; a real deployment has one person per user.
+- **A KI's owner is its id prefix,** not a `user_id` field, so a Dev Tools filter on `user_id`
+  finds nothing. See [Agent Builder: Memory](#agent-builder-memory).
 
 ## Open questions
 
