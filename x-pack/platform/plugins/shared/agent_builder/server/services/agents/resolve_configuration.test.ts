@@ -56,7 +56,7 @@ describe('createConfigurationResolver', () => {
     expect(effective.connector_ids).toEqual(['github-1']);
   });
 
-  it('resolves chat agents against the empty base (identity)', async () => {
+  it('resolves chat agents against the empty base, adding user-memories', async () => {
     const resolver = createConfigurationResolver({
       typeRegistry: createTypeRegistryStub([]),
       logger: loggerMock.create(),
@@ -69,7 +69,69 @@ describe('createConfigurationResolver', () => {
       ctx,
     });
 
-    expect(effective).toEqual(configuration);
+    expect(effective).toEqual({
+      ...configuration,
+      ai_indices: ['user-memories'],
+      post_execution_workflow_ids: ['system-context-engine-round-capture'],
+    });
+  });
+
+  it('applies the built-in AI index switches after merging', async () => {
+    const resolver = createConfigurationResolver({
+      typeRegistry: createTypeRegistryStub([
+        { id: chatAgentTypeId, baseConfiguration: { ai_indices: ['elastic'] } },
+      ]),
+      logger: loggerMock.create(),
+    });
+
+    const effective = await resolver.resolveConfig({
+      agentType: chatAgentTypeId,
+      configuration: {
+        tools: [],
+        ai_indices: ['sales'],
+        enable_elastic_ai_index: false,
+        enable_user_memory: false,
+      },
+      ctx,
+    });
+
+    expect(effective.ai_indices).toEqual(['sales']);
+  });
+
+  it('adds the round capture workflow when the agent remembers users or has an AI index', async () => {
+    const resolver = createConfigurationResolver({
+      typeRegistry: createTypeRegistryStub([]),
+      logger: loggerMock.create(),
+    });
+
+    const remembering = await resolver.resolveConfig({
+      agentType: chatAgentTypeId,
+      configuration: { tools: [], post_execution_workflow_ids: ['mine'] },
+      ctx,
+    });
+    const withAiIndex = await resolver.resolveConfig({
+      agentType: chatAgentTypeId,
+      configuration: { tools: [], ai_indices: ['sales'], enable_user_memory: false },
+      ctx,
+    });
+    const neither = await resolver.resolveConfig({
+      agentType: chatAgentTypeId,
+      configuration: {
+        tools: [],
+        post_execution_workflow_ids: ['mine'],
+        enable_user_memory: false,
+      },
+      ctx,
+    });
+
+    expect(remembering.post_execution_workflow_ids).toEqual([
+      'mine',
+      'system-context-engine-round-capture',
+    ]);
+    expect(withAiIndex.post_execution_workflow_ids).toEqual([
+      'system-context-engine-round-capture',
+    ]);
+    expect(neither.post_execution_workflow_ids).toEqual(['mine']);
   });
 
   it('invokes a function base with the resolution context', async () => {
@@ -100,8 +162,13 @@ describe('createConfigurationResolver', () => {
     const first = await resolver.resolveConfig({ agentType: 'ghost', configuration, ctx });
     await resolver.resolveConfig({ agentType: 'ghost', configuration, ctx });
 
-    // chat base is empty, so an unknown type resolves to the raw configuration
-    expect(first).toEqual(configuration);
+    // chat base is empty, so an unknown type resolves to the raw configuration plus user-memories
+    // and the round capture that comes with it
+    expect(first).toEqual({
+      ...configuration,
+      ai_indices: ['user-memories'],
+      post_execution_workflow_ids: ['system-context-engine-round-capture'],
+    });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('"ghost"'));
   });
@@ -150,7 +217,7 @@ describe('createConfigurationResolver', () => {
       // ...while the merge path still applies the fallback.
       expect(
         await resolver.resolveConfig({ agentType: 'ghost', configuration: { tools: [] }, ctx })
-      ).toEqual(expect.objectContaining({ ai_indices: ['elastic'] }));
+      ).toEqual(expect.objectContaining({ ai_indices: ['elastic', 'user-memories'] }));
     });
   });
 });

@@ -42,14 +42,25 @@ export class AiIndexDataReadService implements AiIndexDataReadServiceApi {
       aiIndexService: Pick<AiIndexService, 'get' | 'list'>;
       logger: Logger;
       isMemoryEnabled: () => Promise<boolean>;
+      /** The ids the caller's user-scoped KIs can be owned by: profile uid and username. */
+      getCurrentUserIds?: () => string[];
     }
   ) {}
 
   async query(request: QueryAiIndicesRequest): Promise<QueryAiIndicesResponse> {
     const { esClient, spaceId, auditLogger, aiIndexService } = this.deps;
     try {
-      const aiIndexDests = (await aiIndexService.list(spaceId)).map(({ dest }) => dest);
-      const response = await queryAiIndices({ esClient, spaceId, aiIndexDests, ...request });
+      const aiIndices = await aiIndexService.list(spaceId);
+      const response = await queryAiIndices({
+        esClient,
+        spaceId,
+        aiIndexDests: aiIndices.map(({ dest }) => dest),
+        userScopedDests: aiIndices
+          .filter(({ memory_scope: scope }) => scope === 'user')
+          .map(({ dest }) => dest),
+        userIds: this.deps.getCurrentUserIds?.() ?? [],
+        ...request,
+      });
       auditLogger.log(aiIndexAuditEvent({ action: AiIndexAuditAction.QUERY }));
       return response;
     } catch (error) {

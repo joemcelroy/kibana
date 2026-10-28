@@ -52,7 +52,7 @@ export interface AgentsServiceStart {
     hidden?: boolean;
   }) => Promise<void>;
   resolveAgentConfiguration: (opts: {
-    agent: AgentDefinition;
+    agent: Pick<AgentDefinition, 'type' | 'configuration'>;
     request: KibanaRequest;
   }) => Promise<AgentConfiguration>;
   resolveAgentBaseConfiguration: (opts: {

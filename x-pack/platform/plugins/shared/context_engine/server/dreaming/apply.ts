@@ -7,7 +7,7 @@
 
 import pRetry from 'p-retry';
 import type { ElasticsearchClient } from '@kbn/core/server';
-import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX } from '../../common/dreaming';
+import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX, SESSION_KI_TYPE } from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import { MAX_KI_REFERENCES } from '../../common/step_types/ki';
 import { KiConflictError, KiNotFoundError } from '../ai_indices/errors';
@@ -19,9 +19,18 @@ import {
   type StoredKi,
 } from '../ai_indices/ki_revision';
 import { softDeleteKi } from '../ai_indices/ki_write';
+import {
+  accessPatternAttributes,
+  accessPatternsOf,
+  baseContent,
+  renderContent,
+  withoutAccessPatternAttributes,
+  type AccessPattern,
+} from './access_patterns';
 import { kiUri, memoryUri, sessionUri } from './ids';
 import {
   ENTITY_ATTRIBUTE_PREFIX,
+  SESSION_ATTRIBUTE,
   USER_ATTRIBUTE,
   citedMemoryIds,
   isStale,
@@ -34,6 +43,7 @@ import type {
   RelationshipOperation,
   UpsertEntityOperation,
   UpsertFactOperation,
+  UpsertSessionOperation,
 } from './resolve_change_set';
 
 const WRITE_CONFLICT_RETRIES = 3;
@@ -184,6 +194,27 @@ const writeDocument = async (
 const userAttributes = (userId: string | undefined): DreamedKiAttributes =>
   userId !== undefined ? { [USER_ATTRIBUTE]: userId } : {};
 
+/**
+ * Content with the access patterns rendered after it, and attributes that carry them. Content or
+ * patterns the operation leaves out are kept from the current revision.
+ */
+const withAccessPatterns = (
+  current: DreamedKi | undefined,
+  content: string | undefined,
+  accessPatterns: AccessPattern[] | undefined,
+  attributes: DreamedKiAttributes
+): Pick<DreamedKi, 'content' | 'attributes'> => {
+  const patterns = accessPatterns ?? accessPatternsOf(current);
+  const rendered = renderContent(content ?? baseContent(current?.content), patterns);
+  return {
+    ...(rendered !== undefined && { content: rendered }),
+    attributes: {
+      ...withoutAccessPatternAttributes(attributes),
+      ...accessPatternAttributes(patterns),
+    },
+  };
+};
+
 const upsertEntity = (context: ApplyContext, operation: UpsertEntityOperation) =>
   writeDocument(context, operation.id, (current) => ({
     ...current,
@@ -191,7 +222,7 @@ const upsertEntity = (context: ApplyContext, operation: UpsertEntityOperation) =
     type: `${ENTITY_TYPE_PREFIX}${operation.type}`,
     title: operation.name,
     ...(operation.description !== undefined && { description: operation.description }),
-    attributes: {
+    ...withAccessPatterns(current, operation.content, operation.accessPatterns, {
       ...current?.attributes,
       ...Object.fromEntries(
         Object.entries(operation.attributes).map(([key, value]) => [
@@ -200,7 +231,7 @@ const upsertEntity = (context: ApplyContext, operation: UpsertEntityOperation) =
         ])
       ),
       ...userAttributes(context.userId),
-    },
+    }),
     references: addReferences(current?.references, [
       ...sourceReferences(operation.sourceMemoryIds),
       ...sessionReferences(operation.sessionIds),
@@ -219,8 +250,10 @@ const upsertFact = (context: ApplyContext, operation: UpsertFactOperation) =>
       id: operation.id,
       type: `${FACT_TYPE_PREFIX}${operation.type}`,
       title: operation.title,
-      content: operation.content,
-      attributes: { ...current?.attributes, ...userAttributes(context.userId) },
+      ...withAccessPatterns(current, operation.content, operation.accessPatterns, {
+        ...current?.attributes,
+        ...userAttributes(context.userId),
+      }),
       references: addReferences(kept, [
         ...(about ?? []).map((id) => ({ uri: kiUri(id), relation: 'about' as const })),
         ...sourceReferences(operation.sourceMemoryIds),
@@ -228,6 +261,24 @@ const upsertFact = (context: ApplyContext, operation: UpsertFactOperation) =>
       ]),
     };
   });
+
+const upsertSession = (context: ApplyContext, operation: UpsertSessionOperation) =>
+  writeDocument(context, operation.id, (current) => ({
+    ...current,
+    id: operation.id,
+    type: SESSION_KI_TYPE,
+    title: operation.title,
+    content: operation.content,
+    attributes: {
+      ...current?.attributes,
+      ...userAttributes(context.userId),
+      [SESSION_ATTRIBUTE]: operation.sessionId,
+    },
+    references: addReferences(current?.references, [
+      ...sourceReferences(operation.sourceMemoryIds),
+      ...sessionReferences([operation.sessionId]),
+    ]),
+  }));
 
 const applyRelationship = (context: ApplyContext, operation: RelationshipOperation) =>
   writeDocument(
@@ -323,11 +374,14 @@ export const applyOperations = async (
   for (const operation of operations) {
     switch (operation.op) {
       case 'upsert_entity':
-      case 'upsert_fact': {
+      case 'upsert_fact':
+      case 'upsert_session': {
         const result =
           operation.op === 'upsert_entity'
             ? await upsertEntity(context, operation)
-            : await upsertFact(context, operation);
+            : operation.op === 'upsert_fact'
+            ? await upsertFact(context, operation)
+            : await upsertSession(context, operation);
         if (result !== 'skipped') {
           counts[result] += 1;
         }

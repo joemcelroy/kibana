@@ -124,6 +124,11 @@ export interface RunAgentStackEntry {
   conversationId?: string;
   executionId?: string;
   origin?: ConversationOriginType;
+  /**
+   * Context Engine ids of the AI indices the agent is configured with (its effective
+   * `ai_indices`). Memory tools write to the ones that take memories.
+   */
+  aiIndices?: string[];
 }
 
 export interface RunToolStackEntry {

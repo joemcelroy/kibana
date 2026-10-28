@@ -52,6 +52,7 @@ import type { AgentFormData } from '../agent_form';
 import { truncateAvatarSymbol } from '../agent_form_validation';
 import { AiIndicesSection } from './ai_indices_section';
 import { AutoApprovedApisSection } from './auto_approved_apis_section';
+import { MemorySection } from './memory_section';
 import { SubagentsSection } from './subagents_section';
 
 interface AgentSettingsTabProps {
@@ -349,6 +350,8 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
       </EuiFlexGroup>
 
       <AiIndicesSection control={control} agentId={agentId} isFormDisabled={isFormDisabled} />
+
+      <MemorySection control={control} isFormDisabled={isFormDisabled} />
 
       <EuiHorizontalRule />
 

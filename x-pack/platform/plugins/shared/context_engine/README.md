@@ -199,9 +199,39 @@ Elasticsearch `read` on it may see knowledge indicators for dashboards, rules or
 connectors they cannot open in Kibana. This is by design; the Elastic AI Index
 is queried like any other index.
 
+## Memory API: remember, recall and save transcript
+
+Context Engine owns three memory operations. Each is a start contract method
+(`remember`, `recall`, `saveTranscript`, each called with
+`{ spaceId, request, input }`) and a public route that runs the same code as the
+request's user:
+
+| Operation         | Route                                    | Needs                                   | Result                                                       |
+| ----------------- | ---------------------------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| `remember`        | `POST /api/context_engine/_remember`        | Context Engine write, memory on         | `{ id, session_id, ai_index_ids?, dreams? }`                   |
+| `recall`          | `POST /api/context_engine/_recall`          | Context Engine `read`                   | `{ scope, query_type, results \| columns+values, errors? }`  |
+| `saveTranscript`  | `POST /api/context_engine/_save_transcript` | Context Engine `read`, memory on        | `{ id, ai_index_ids }`                                         |
+
+`recall` takes `query` as plain words or as ES|QL (a query that parses and
+starts with `FROM` or `TS`), and `scope`:
+
+- `ai-index` (default): plain words get a hybrid search of each AI index in
+  `ai_index_ids` (every one the caller can read when omitted), best first. ES|QL
+  runs as `POST /api/context_engine/ai_index/_query` does: its `FROM` names the
+  AI indices, the server adds the space, lifecycle and per-user filters and a
+  row limit, and it returns `{ columns, values }`.
+- `short-term`: plain words only. Searches short-term memory by meaning, among
+  shared memories and ones about the caller, untargeted or targeted at an AI
+  index they can read. Transcripts are never searched.
+
+The `contextEngineAgentBuilder` plugin's `platform.context_engine.remember` and
+`platform.context_engine.recall` tools call these contract methods; the tools
+only add what the agent knows, such as its conversation and AI indices. Round
+capture calls `saveTranscript`.
+
 ## Agent Builder tools
 
-The `contextEngineAgentBuilder` plugin adds three read-only tools under
+The `contextEngineAgentBuilder` plugin also adds two read-only tools under
 `platform.context_engine.*`. Each one runs the same code as the matching route
 above, as the same user, so a tool and its route always return the same thing:
 
@@ -209,30 +239,29 @@ above, as the same user, so a tool and its route always return the same thing:
 | ------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `list_ai_indices`   | `GET /api/context_engine/ai_index`                | `{ id, esql_target, description, managed, assigned_to_agent? }` per listed entry  |
 | `describe_ai_index` | `GET /api/context_engine/ai_index/{id}/_describe` | `{ response }`, the text block describing the index                               |
-| `query_ai_indices`  | `POST /api/context_engine/ai_index/_query`        | `{ columns, values }`                                                             |
 
 `assigned_to_agent` is only set when an Agent Builder agent calls the tool. It
 says whether that agent is configured with the index. Any other caller, such as
 an MCP client, does not get the field.
 
-`query_ai_indices` has no `time_range` or `filter` parameters. Time constraints
-go in the ES|QL itself or in `params`. Its rows come back as a plain `other`
-result, not `esql_results`. This is deliberate. In chat, an `esql_results`
-result gets a "See in Discover" link that opens the raw query in Discover, and
-when the agent asks for a chart the UI runs the raw query again in Lens. Both
-run the query as written, without the space filter and row limit the server
-adds, so they could show documents from other spaces.
+ES|QL over AI indices goes through `recall`. It has no `time_range` or `filter`
+parameters: time constraints go in the ES|QL itself or in `params`. Its rows
+come back as a plain `other` result, not `esql_results`. This is deliberate. In
+chat, an `esql_results` result gets a "See in Discover" link that opens the raw
+query in Discover, and when the agent asks for a chart the UI runs the raw query
+again in Lens. Both run the query as written, without the space filter and row
+limit the server adds, so they could show documents from other spaces.
 
 To see the tools, a caller needs Agent Builder's `read` privilege; that is the
 only check the MCP server does. To use them, the caller also needs Context
 Engine's `read` privilege. Every tool checks this itself and returns an error
 result when it is missing.
 
-In Agent Builder chat, any agent with at least one AI Index gets these three
-tools automatically (while the `aiIndices` experimental feature is on). Its
-system prompt tells it to list, then describe, then query, and leaves space
-scoping to `query_ai_indices` rather than handing the agent a filter to copy.
-The `ki-retrieval` skill teaches the same steps with the same tools.
+In Agent Builder chat, any agent with at least one AI Index gets these tools and
+`recall` automatically (while the `aiIndices` experimental feature is on). Its
+system prompt tells it to start with `recall`, and leaves space scoping to the
+server rather than handing the agent a filter to copy. The `ki-retrieval` skill
+teaches listing, describing and querying with the same tools.
 
 The space always comes from the request; it cannot be passed as a parameter. In
 Agent Builder chat, it is the agent's space. Over MCP, it is the space in the

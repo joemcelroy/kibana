@@ -11,32 +11,38 @@ import {
   compareDreamingCursors,
   cursorOfMemory,
   type AiIndexDreaming,
-  type ShortTermMemory,
+  type DreamingMemory,
 } from '../../common/dreaming';
-import { groupKeyOf, type ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import { groupKeyOf } from '../short_term_memory/service';
+import type { DreamingMemoryReader } from './memory_reader';
 import { buildTasks, planRun } from './plan_run';
 
 const memory = (
   id: string,
   timestamp: string,
   sessionId: string,
-  userId?: string
-): ShortTermMemory => ({
+  userId?: string,
+  aiIndexIds?: string[]
+): DreamingMemory => ({
   '@timestamp': timestamp,
   id,
   session_id: sessionId,
   ...(userId !== undefined && { user_id: userId }),
   content: `memory ${id}`,
+  ...(aiIndexIds !== undefined && { ai_index_ids: aiIndexIds }),
 });
 
-/** An in-memory short-term stream that pages like the real one. */
-const fakeShortTermMemory = (memories: ShortTermMemory[]): ShortTermMemoryServiceApi => ({
-  remember: jest.fn(),
+/** An in-memory stream of memories and transcripts that pages like the real reader. */
+const fakeMemoryReader = (memories: DreamingMemory[]): DreamingMemoryReader => ({
   forget: jest.fn(),
   getByIds: jest.fn(),
-  pull: jest.fn(async (_spaceId, { after, until, groupBy, groupKeys, size }) => {
+  pull: jest.fn(async (_spaceId, { after, until, groupBy, groupKeys, aiIndexId, size }) => {
     const matching = memories
       .filter((item) => Date.parse(item['@timestamp']) <= Date.parse(until))
+      .filter(
+        (item) =>
+          aiIndexId === undefined || !item.ai_index_ids || item.ai_index_ids.includes(aiIndexId)
+      )
       .filter((item) => !after || compareDreamingCursors(cursorOfMemory(item), after) > 0)
       .filter((item) => !groupKeys || groupKeys.includes(groupKeyOf(item, groupBy)))
       .sort((a, b) => compareDreamingCursors(cursorOfMemory(a), cursorOfMemory(b)));
@@ -73,6 +79,19 @@ describe('buildTasks', () => {
     expect(tasks[2].memory_ids).toHaveLength(MAX_DREAMING_MEMORIES_PER_TASK);
     expect(tasks[3].memory_ids).toHaveLength(1);
     expect(tasks[0].from).toEqual({ timestamp: '2026-10-23T08:00:00.000Z', memory_id: '' });
+  });
+
+  it('also splits a group when its memories would make the task too large', () => {
+    const round = (id: string) => ({
+      ...memory(id, '2026-10-23T10:00:00.000Z', 's-1', 'alice'),
+      transcript: 'x'.repeat(40_000),
+    });
+    const tasks = buildTasks([round('r-1'), round('r-2'), round('r-3')], 'session_id');
+
+    // A transcript is counted as the model sees it, cut to 16,000 characters: six fit in 100,000.
+    expect(tasks).toHaveLength(1);
+    const big = Array.from({ length: 7 }, (_, index) => round(`r-${index}`));
+    expect(buildTasks(big, 'session_id').map(({ memory_ids: ids }) => ids.length)).toEqual([6, 1]);
   });
 
   it('splits a session shared by two users into one task per user', () => {
@@ -112,8 +131,9 @@ describe('planRun', () => {
 
   it('reads retry groups and everything after the cursor up to the settle lag', async () => {
     const plan = await planRun({
-      shortTermMemory: fakeShortTermMemory(stream),
+      memoryReader: fakeMemoryReader(stream),
       spaceId: 'default',
+      aiIndexId: 'idx',
       dreaming,
       dryRun: false,
       now,
@@ -126,8 +146,9 @@ describe('planRun', () => {
 
   it('keeps the cursor when nothing new was written', async () => {
     const plan = await planRun({
-      shortTermMemory: fakeShortTermMemory(stream.slice(0, 3)),
+      memoryReader: fakeMemoryReader(stream.slice(0, 3)),
       spaceId: 'default',
+      aiIndexId: 'idx',
       dreaming: { ...dreaming, state: { ...dreaming.state, retry: [] } },
       dryRun: false,
       now,
@@ -138,8 +159,9 @@ describe('planRun', () => {
 
   it('reads only the target for an explicit run, and neither moves the cursor nor consumes retries', async () => {
     const plan = await planRun({
-      shortTermMemory: fakeShortTermMemory(stream),
+      memoryReader: fakeMemoryReader(stream),
       spaceId: 'default',
+      aiIndexId: 'idx',
       dreaming,
       target: { session_id: 's-done' },
       dryRun: true,
@@ -149,5 +171,83 @@ describe('planRun', () => {
     expect(plan.new_cursor).toBeUndefined();
     expect(plan.consumed_retry).toEqual([]);
     expect(plan.dry_run).toBe(true);
+  });
+
+  it('reads an explicit run’s target up to now, ignoring the settle lag', async () => {
+    const plan = await planRun({
+      memoryReader: fakeMemoryReader(stream),
+      spaceId: 'default',
+      aiIndexId: 'idx',
+      dreaming,
+      target: { session_id: 's-new' },
+      dryRun: false,
+      now,
+    });
+    // m-4 is inside the settle lag; it has no user, so its task sorts first.
+    expect(plan.tasks.flatMap(({ memory_ids: ids }) => ids)).toEqual(['m-4', 'm-3']);
+  });
+
+  it('dreams transcripts with the memories around them', async () => {
+    const { content, ...rest } = memory('r-1', '2026-10-23T10:40:00.000Z', 's-new', 'alice');
+    const round = { ...rest, transcript: '## User\nWhich seat?' };
+    const remembered = memory('m-9', '2026-10-23T10:45:00.000Z', 's-new', 'alice');
+
+    const plan = await planRun({
+      memoryReader: fakeMemoryReader([round, remembered]),
+      spaceId: 'default',
+      aiIndexId: 'idx',
+      dreaming: { enabled: true },
+      dryRun: false,
+      now,
+    });
+
+    expect(plan.tasks.flatMap(({ memory_ids: ids }) => ids)).toEqual(['r-1', 'm-9']);
+    expect(plan.new_cursor).toEqual(cursorOfMemory(remembered));
+  });
+
+  it('skips memories targeted at other AI indices on every read', async () => {
+    const targeted = [
+      memory('t-0', '2026-10-23T07:45:00.000Z', 's-retry', 'alice', ['other']),
+      memory('t-1', '2026-10-23T10:30:00.000Z', 's-new', 'alice', ['idx']),
+      memory('t-2', '2026-10-23T10:45:00.000Z', 's-new', 'alice', ['other']),
+      memory('t-3', '2026-10-23T10:50:00.000Z', 's-new', 'alice', ['other', 'idx']),
+    ];
+    const memoryReader = fakeMemoryReader([...stream, ...targeted]);
+
+    const plan = await planRun({
+      memoryReader,
+      spaceId: 'default',
+      aiIndexId: 'idx',
+      dreaming,
+      dryRun: false,
+      now,
+    });
+    expect(plan.tasks.flatMap(({ memory_ids: ids }) => ids).sort()).toEqual([
+      'm-0',
+      'm-3',
+      't-1',
+      't-3',
+    ]);
+    expect(plan.new_cursor).toEqual({ timestamp: '2026-10-23T10:50:00.000Z', memory_id: 't-3' });
+    expect(memoryReader.pull).toHaveBeenCalledWith(
+      'default',
+      expect.objectContaining({ aiIndexId: 'idx' })
+    );
+
+    const explicit = await planRun({
+      memoryReader,
+      spaceId: 'default',
+      aiIndexId: 'idx',
+      dreaming,
+      target: { session_id: 's-new' },
+      dryRun: false,
+      now,
+    });
+    expect(explicit.tasks.flatMap(({ memory_ids: ids }) => ids)).toEqual([
+      'm-4',
+      'm-3',
+      't-1',
+      't-3',
+    ]);
   });
 });

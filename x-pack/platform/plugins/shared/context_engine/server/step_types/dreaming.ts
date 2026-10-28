@@ -16,6 +16,7 @@ import {
 } from '../../common/step_types/dreaming';
 import { AiIndexNotFoundError } from '../ai_indices/errors';
 import type { AiIndexService } from '../ai_indices/service';
+import { createVerifyEsql } from '../dreaming/access_patterns';
 import { authorizeDreaming } from '../dreaming/authorize';
 import {
   DreamingForbiddenError,
@@ -29,7 +30,7 @@ import {
 import { graphifyTask, type DreamingModel } from '../dreaming/graphify';
 import type { DreamingRunProgress } from '../dreaming/run_progress';
 import type { DreamingService } from '../dreaming/service';
-import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import type { DreamingMemoryReader } from '../dreaming/memory_reader';
 import { assertContextEngineEnabled } from './helpers';
 import { toStepError } from './to_step_error';
 
@@ -37,7 +38,7 @@ import { toStepError } from './to_step_error';
 export interface DreamingStepDependencies {
   getAiIndexService: () => AiIndexService;
   getDreamingService: () => DreamingService;
-  getShortTermMemory: () => ShortTermMemoryServiceApi;
+  getMemoryReader: () => DreamingMemoryReader;
   getRunProgress: () => DreamingRunProgress;
   getDreamingModel: (request: KibanaRequest) => Promise<DreamingModel>;
   isContextEngineEnabled: (spaceId: string) => Promise<boolean>;
@@ -107,10 +108,11 @@ export const getDreamingTasksStepDefinition = ({
 
 export const getGraphifyStepDefinition = ({
   getAiIndexService,
-  getShortTermMemory,
+  getMemoryReader,
   getRunProgress,
   getDreamingModel,
   isContextEngineEnabled,
+  logger,
 }: DreamingStepDependencies) =>
   createServerStepDefinition({
     ...graphifyStepCommonDefinition,
@@ -139,9 +141,10 @@ export const getGraphifyStepDefinition = ({
           config: dreaming ?? { enabled: false },
           dryRun,
           esClient,
-          shortTermMemory: getShortTermMemory(),
+          memoryReader: getMemoryReader(),
           runProgress: getRunProgress(),
           getModel: () => getDreamingModel(request),
+          verifyEsql: createVerifyEsql({ esClient, logger, abortSignal: context.abortSignal }),
           abortSignal: context.abortSignal,
         });
         const { operations, ...counts } = output;

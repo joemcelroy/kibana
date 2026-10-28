@@ -21,6 +21,7 @@ export const appPaths = {
     tools: ({ agentId }: { agentId: string }) => `/agents/${agentId}/tools`,
     connectors: ({ agentId }: { agentId: string }) => `/agents/${agentId}/connectors`,
     overview: ({ agentId }: { agentId: string }) => `/agents/${agentId}/overview`,
+    memory: ({ agentId }: { agentId: string }) => `/agents/${agentId}/memory`,
   },
 
   // Manage routes (global CRUD, no agent context)
@@ -38,6 +39,7 @@ export const appPaths = {
     plugins: '/manage/plugins',
     pluginDetails: ({ pluginId }: { pluginId: string }) => `/manage/plugins/${pluginId}`,
     connectors: '/manage/connectors',
+    memory: '/manage/memory',
     mcpClients: '/manage/tools/mcp_clients',
     mcpClientCreate: '/manage/tools/mcp_clients/new',
     mcpClientEdit: ({ clientId }: { clientId: string }) => `/manage/tools/mcp_clients/${clientId}`,

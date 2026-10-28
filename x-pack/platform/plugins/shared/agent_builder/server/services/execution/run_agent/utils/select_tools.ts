@@ -8,7 +8,10 @@
 import type { KibanaRequest } from '@kbn/core-http-server';
 import { defaultAgentToolIds } from '@kbn/agent-builder-common';
 import { ToolOrigin, ToolType, filterToolsBySelection } from '@kbn/agent-builder-common';
-import { contextEngineMemoryTools } from '@kbn/agent-builder-common/tools';
+import {
+  contextEngineMemoryTools,
+  contextEngineRecallTools,
+} from '@kbn/agent-builder-common/tools';
 import type {
   ToolProvider,
   ExecutableTool,
@@ -84,6 +87,9 @@ export const selectTools = async ({
   // Memory tools have no skill of their own, so they stay static.
   const hasMemoryEnabledAiIndex =
     aiIndexCatalog?.some(({ memoryEnabled }) => memoryEnabled) ?? false;
+  // Recall reads any AI index, so it only needs one the agent can resolve.
+  const hasResolvedAiIndex =
+    aiIndexCatalog?.some(({ esqlTarget }) => esqlTarget !== undefined) ?? false;
 
   // pick tools from provider (from agent config and attachment-type tools)
   const staticRegistryTools = await pickTools({
@@ -95,6 +101,9 @@ export const selectTools = async ({
         : []),
       ...(aiIndicesEnabled && hasMemoryEnabledAiIndex
         ? [{ tool_ids: Object.values(contextEngineMemoryTools) }]
+        : []),
+      ...(aiIndicesEnabled && hasResolvedAiIndex
+        ? [{ tool_ids: Object.values(contextEngineRecallTools) }]
         : []),
     ],
     toolProvider,

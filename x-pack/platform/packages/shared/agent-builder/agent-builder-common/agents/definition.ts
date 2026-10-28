@@ -35,6 +35,18 @@ export const agentBuilderDefaultAgentId = 'elastic-ai-agent';
 export const agentBuilderDefaultAiIndexId = 'elastic';
 
 /**
+ * ID of the AI index holding what agents remember about each user. Every agent gets it unless its
+ * `enable_user_memory` is false.
+ */
+export const agentBuilderUserMemoriesAiIndexId = 'user-memories';
+
+/**
+ * ID of the Context Engine system workflow that records each completed round for dreaming. Agent
+ * Builder runs it after every round of an agent that has an AI index or remembers users.
+ */
+export const agentBuilderRoundCaptureWorkflowId = 'system-context-engine-round-capture';
+
+/**
  * ID of the Context Engine retrieval skill. Agent Builder grants it at runtime to any agent that
  * can reach an AI Index; it is never part of the agent's own configuration.
  */
@@ -166,6 +178,17 @@ export interface AgentConfiguration {
    * the accuracy and token efficiency.
    * */
   ai_indices?: string[];
+
+  /**
+   * Whether the agent searches the default `elastic` AI index its type provides. Unset means true.
+   */
+  enable_elastic_ai_index?: boolean;
+
+  /**
+   * Whether the agent remembers what it learns about each user in the `user-memories` AI index.
+   * Unset means true.
+   */
+  enable_user_memory?: boolean;
 
   /**
    * Optional list of agent IDs this agent may spawn as sub-agents.

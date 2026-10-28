@@ -11,6 +11,7 @@ import {
   platformSignificantEventsTools,
   contextEngineAiIndexTools,
   contextEngineMemoryTools,
+  contextEngineRecallTools,
   contextEngineAutomationTools,
 } from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
@@ -134,6 +135,7 @@ export const AGENT_BUILDER_BUILTIN_TOOLS = [
   contextEngineAutomationTools.runAutomation,
   ...Object.values(contextEngineAiIndexTools),
   ...Object.values(contextEngineMemoryTools),
+  ...Object.values(contextEngineRecallTools),
 
   // Nightshift – Sandbox
   'nightshift_sandbox_bash',

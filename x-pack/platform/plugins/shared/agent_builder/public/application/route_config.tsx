@@ -19,6 +19,7 @@ import { AgentBuilderAgentOverviewPage } from './pages/agent_overview';
 import { AgentBuilderAgentSkillsPage } from './pages/agent_skills';
 import { AgentBuilderAgentPluginsPage } from './pages/agent_plugins';
 import { AgentBuilderAgentToolsPage } from './pages/agent_tools';
+import { AgentBuilderAgentMemoryPage, AgentBuilderMemoryPage } from './pages/memory';
 import { AgentBuilderToolsPage } from './pages/tools';
 import { AgentBuilderToolCreatePage } from './pages/tool_create';
 import { AgentBuilderToolDetailsPage } from './pages/tool_details';
@@ -79,6 +80,12 @@ const navLabels = {
   agents: i18n.translate('xpack.agentBuilder.routeConfig.agents', {
     defaultMessage: 'Agents',
   }),
+  memory: i18n.translate('xpack.agentBuilder.routeConfig.memory', {
+    defaultMessage: 'Memory',
+  }),
+  agentMemory: i18n.translate('xpack.agentBuilder.routeConfig.agentMemory', {
+    defaultMessage: 'Manage memory',
+  }),
 };
 
 // Routes ordered from most specific to least specific for correct matching
@@ -124,6 +131,15 @@ export const agentRoutes: RouteDefinition[] = [
     sidebarView: 'conversation',
     navLabel: navLabels.tools,
     element: <AgentBuilderAgentToolsPage />,
+  },
+  // The user's memory across every agent, reached from an agent too.
+  {
+    path: '/agents/:agentId/memory',
+    viewId: agentBuilderViewIds.agentMemory,
+    sidebarView: 'conversation',
+    isExperimental: true,
+    navLabel: navLabels.agentMemory,
+    element: <AgentBuilderAgentMemoryPage />,
   },
   // Catch-all for agent root - must be last
   {
@@ -201,6 +217,14 @@ export const manageRoutes: RouteDefinition[] = [
     sidebarView: 'manage',
     navLabel: navLabels.tools,
     element: <AgentBuilderToolsPage />,
+  },
+  {
+    path: '/manage/memory',
+    viewId: agentBuilderViewIds.manageMemory,
+    sidebarView: 'manage',
+    isExperimental: true,
+    navLabel: navLabels.memory,
+    element: <AgentBuilderMemoryPage />,
   },
   {
     path: '/manage/tools/new',

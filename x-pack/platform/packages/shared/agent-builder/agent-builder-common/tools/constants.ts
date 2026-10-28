@@ -86,13 +86,20 @@ export const platformSignificantEventsTools = {
 export const contextEngineAiIndexTools = {
   listAiIndices: `${internalNamespaces.platformContextEngine}.list_ai_indices`,
   describeAiIndex: `${internalNamespaces.platformContextEngine}.describe_ai_index`,
-  queryAiIndices: `${internalNamespaces.platformContextEngine}.query_ai_indices`,
 } as const;
 
 /** AI-index memory tools, registered by the Context Engine Agent Builder plugin. */
 export const contextEngineMemoryTools = {
   remember: `${internalNamespaces.platformContextEngine}.remember`,
   forget: `${internalNamespaces.platformContextEngine}.forget`,
+} as const;
+
+/**
+ * The recall tool, registered by the Context Engine Agent Builder plugin. Offered to any agent with
+ * an AI index, separately from the memory tools, since it reads knowledge as well as memory.
+ */
+export const contextEngineRecallTools = {
+  recall: `${internalNamespaces.platformContextEngine}.recall`,
 } as const;
 
 /** AI-index automation tools, registered by the Context Engine Agent Builder plugin. */

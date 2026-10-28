@@ -42,6 +42,10 @@ export const entityId = (owner: string, type: string, name: string): string =>
 export const factId = (owner: string, executionId: string, taskId: string, ref: string): string =>
   `${ownerIdPrefix(owner)}fact-${shortHash(executionId, taskId, ref)}`;
 
+/** One session document per owner and session, so every run updates the same one. */
+export const sessionKiId = (owner: string, sessionId: string): string =>
+  `${ownerIdPrefix(owner)}session-${shortHash(sessionId)}`;
+
 export const memoryUri = (memoryId: string): string => `memory://${memoryId}`;
 export const sessionUri = (sessionId: string): string => `session://${sessionId}`;
 export const kiUri = (kiId: string): string => `ki://${kiId}`;

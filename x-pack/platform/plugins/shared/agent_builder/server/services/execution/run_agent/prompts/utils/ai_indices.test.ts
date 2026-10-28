@@ -55,6 +55,13 @@ describe('getAiIndicesInstructions', () => {
     expect(instructions).toContain('continue with other relevant data or tools');
   });
 
+  it('starts lookups with recall, narrowed by scope', () => {
+    const instructions = render();
+
+    expect(instructions).toContain('start with `platform.context_engine.recall`');
+    expect(instructions).toContain('`user-memories` for what you know about the user');
+  });
+
   it('renders each catalog entry with its registry ID, ES|QL target, and description', () => {
     const instructions = render();
 
@@ -105,8 +112,9 @@ describe('getAiIndicesInstructions', () => {
   it('points at the ki-retrieval skill by name, leaving the path to the SKILLS section', () => {
     const instructions = render();
 
-    expect(instructions).toContain('Load the `ki-retrieval` skill before');
-    expect(instructions).toContain('carries the AI Index tools');
+    expect(instructions).toContain('recall also takes an ES|QL query');
+    expect(instructions).toContain('Load the `ki-retrieval` skill');
+    expect(instructions).toContain('carries the AI Index list and describe tools');
     expect(instructions).not.toContain('/skills/');
   });
 
@@ -141,5 +149,25 @@ describe('getAiIndicesInstructions', () => {
     expect(instructions).not.toContain('"filter"');
     expect(instructions).not.toContain('ignore_unmapped');
     expect(instructions).not.toContain('verbatim');
+  });
+
+  it('marks AI Indices that take memories and points the agent at remember', () => {
+    const instructions = render({
+      catalog: [
+        ...defaultCatalog,
+        {
+          id: 'user-memories',
+          esqlTarget: 'ai-index-idx-user-memories',
+          description: 'What agents learned about each user.',
+          memoryEnabled: true,
+        },
+      ],
+    });
+
+    expect(instructions).toContain(
+      '- Registry ID: `user-memories`; ES|QL target: ai-index-idx-user-memories; takes memories — What agents learned about each user.'
+    );
+    expect(instructions).toContain('record it with `remember`');
+    expect(render({ catalog: defaultCatalog })).not.toContain('`remember`');
   });
 });

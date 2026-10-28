@@ -89,6 +89,40 @@ describe('conversation access control', () => {
     });
   });
 
+  describe('isConversationOwner for an API key', () => {
+    const fromBasicAuth = { userId: 'realm:["file","file1","alice"]', username: 'alice' };
+
+    it("matches what its creator's requests without a profile created", () => {
+      expect(
+        isConversationOwner({
+          owner: fromBasicAuth,
+          user: { ...user, realmId: 'realm:["file","file1","alice"]' },
+        })
+      ).toBe(true);
+      expect(
+        isConversationOwner({
+          owner: fromBasicAuth,
+          user: { username: 'alice', isAdmin: false, realmId: 'realm:["file","file1","alice"]' },
+        })
+      ).toBe(true);
+    });
+
+    it('still matches by profile id, and never another realm', () => {
+      expect(
+        isConversationOwner({
+          owner: { userId, username: 'alice' },
+          user: { ...user, realmId: 'realm:["file","file1","alice"]' },
+        })
+      ).toBe(true);
+      expect(
+        isConversationOwner({
+          owner: fromBasicAuth,
+          user: { ...user, realmId: 'realm:["native","native1","alice"]' },
+        })
+      ).toBe(false);
+    });
+  });
+
   describe('isConversationMember', () => {
     const entry = (
       overrides: Partial<ConversationAccessControlEntry> = {}

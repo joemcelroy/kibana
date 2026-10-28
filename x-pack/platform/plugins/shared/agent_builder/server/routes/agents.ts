@@ -94,6 +94,20 @@ const AI_INDICES_SCHEMA = schema.arrayOf(
   }
 );
 
+const ENABLE_ELASTIC_AI_INDEX_SCHEMA = schema.boolean({
+  meta: {
+    description:
+      'Whether the agent searches the default elastic AI index its type provides. Defaults to true.',
+  },
+});
+
+const ENABLE_USER_MEMORY_SCHEMA = schema.boolean({
+  meta: {
+    description:
+      'Whether the agent remembers what it learns about each user in the user-memories AI index. Defaults to true.',
+  },
+});
+
 const SUBAGENT_IDS_SCHEMA = schema.arrayOf(
   schema.string({
     maxLength: agentIdMaxLength,
@@ -450,6 +464,8 @@ export function registerAgentRoutes({
                   plugin_ids: schema.maybe(PLUGINS_SCHEMA),
                   connector_ids: schema.maybe(CONNECTORS_SCHEMA),
                   ai_indices: schema.maybe(AI_INDICES_SCHEMA),
+                  enable_elastic_ai_index: schema.maybe(ENABLE_ELASTIC_AI_INDEX_SCHEMA),
+                  enable_user_memory: schema.maybe(ENABLE_USER_MEMORY_SCHEMA),
                   subagent_ids: schema.maybe(SUBAGENT_IDS_SCHEMA),
                   approvals: schema.maybe(APPROVALS_SCHEMA),
                 },
@@ -602,6 +618,8 @@ export function registerAgentRoutes({
                     plugin_ids: schema.maybe(PLUGINS_SCHEMA),
                     connector_ids: schema.maybe(CONNECTORS_SCHEMA),
                     ai_indices: schema.maybe(AI_INDICES_SCHEMA),
+                    enable_elastic_ai_index: schema.maybe(ENABLE_ELASTIC_AI_INDEX_SCHEMA),
+                    enable_user_memory: schema.maybe(ENABLE_USER_MEMORY_SCHEMA),
                     subagent_ids: schema.maybe(SUBAGENT_IDS_SCHEMA),
                     approvals: schema.maybe(APPROVALS_SCHEMA),
                   },

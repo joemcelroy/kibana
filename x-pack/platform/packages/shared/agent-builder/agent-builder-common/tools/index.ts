@@ -20,6 +20,7 @@ export {
   platformSignificantEventsTools,
   contextEngineAiIndexTools,
   contextEngineMemoryTools,
+  contextEngineRecallTools,
   contextEngineAutomationTools,
   attachmentTools,
   internalTools,

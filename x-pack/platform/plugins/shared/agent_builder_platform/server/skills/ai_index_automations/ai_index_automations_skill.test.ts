@@ -7,8 +7,8 @@
 
 import { isAllowedBuiltinSkill } from '@kbn/agent-builder-server/allow_lists';
 import {
-  contextEngineAiIndexTools,
   contextEngineAutomationTools,
+  contextEngineRecallTools,
   platformCoreTools,
 } from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
@@ -76,7 +76,7 @@ describe('aiIndexAutomationsSkill', () => {
       platformCoreTools.getWorkflowExecutionStatus,
       platformCoreTools.generateEsql,
       platformCoreTools.executeEsql,
-      contextEngineAiIndexTools.queryAiIndices,
+      contextEngineRecallTools.recall,
       `${internalNamespaces.workflows}.validate_workflow`,
       `${internalNamespaces.workflows}.get_workflow`,
       `${internalNamespaces.workflows}.get_step_definitions`,
@@ -444,9 +444,7 @@ describe('aiIndexAutomationsSkill', () => {
     });
 
     it('expands tags before filtering, since == skips multivalued rows', () => {
-      expect(content).toContain(
-        `Query\nthe tag back with \`${contextEngineAiIndexTools.queryAiIndices}\``
-      );
+      expect(content).toContain(`Query\nthe tag back with \`${contextEngineRecallTools.recall}\``);
       expect(content).toMatch(/\| MV_EXPAND tags\n\| WHERE tags == "ce-pilot-<runId>"/);
       expect(content).toMatch(/`MV_EXPAND tags` is not optional/);
       expect(content).toMatch(/skips multivalued\s+rows outright/);
@@ -460,7 +458,7 @@ describe('aiIndexAutomationsSkill', () => {
     it('cleans up by KI ids read through the space-scoped tool, never a raw backing-store query', () => {
       const prose = content.replace(/\s+/g, ' ');
 
-      expect(prose).toContain('Read the ids first with `platform.context_engine.query_ai_indices`');
+      expect(prose).toContain('Read the ids first with `platform.context_engine.recall`');
       expect(content).toMatch(/\| WHERE tags == "ce-pilot-<runId>"\n\| STATS BY id\n/);
       expect(prose).toContain(
         'a `foreach` over `consts.ki_ids` calling `context-engine.deleteKi` with `ki_id` set to each `id`'

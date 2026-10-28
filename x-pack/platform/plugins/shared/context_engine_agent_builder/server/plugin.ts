@@ -5,7 +5,13 @@
  * 2.0.
  */
 
-import type { CoreSetup, CoreStart, Plugin, PluginInitializerContext } from '@kbn/core/server';
+import type {
+  CoreSetup,
+  CoreStart,
+  Logger,
+  Plugin,
+  PluginInitializerContext,
+} from '@kbn/core/server';
 import type {
   ContextEngineAgentBuilderPluginSetup,
   ContextEngineAgentBuilderPluginStart,
@@ -14,6 +20,11 @@ import type {
 } from './types';
 import { registerContextEngineAgentBuilderIntegration } from './register_agent_builder_integration';
 import { registerContextEngineInferenceFeatures } from './register_inference_features';
+import {
+  installRoundCaptureWorkflow,
+  registerRoundCaptureWorkflowOwner,
+} from './round_capture/install';
+import { createCaptureRoundStepDefinition } from './round_capture/step';
 
 export class ContextEngineAgentBuilderPlugin
   implements
@@ -24,7 +35,11 @@ export class ContextEngineAgentBuilderPlugin
       ContextEngineAgentBuilderStartDependencies
     >
 {
-  constructor(_initializerContext: PluginInitializerContext) {}
+  private readonly logger: Logger;
+
+  constructor(initializerContext: PluginInitializerContext) {
+    this.logger = initializerContext.logger.get();
+  }
 
   setup(
     coreSetup: CoreSetup<
@@ -39,6 +54,17 @@ export class ContextEngineAgentBuilderPlugin
       workflowsManagement: setupDeps.workflowsManagement.management,
     });
 
+    registerRoundCaptureWorkflowOwner(setupDeps.workflowsExtensions);
+    setupDeps.workflowsExtensions.registerStepDefinition(
+      createCaptureRoundStepDefinition({
+        logger: this.logger.get('round_capture'),
+        getDeps: async () => {
+          const [coreStart, { agentBuilder, contextEngine }] = await coreSetup.getStartServices();
+          return { coreStart, agentBuilder, contextEngine };
+        },
+      })
+    );
+
     if (setupDeps.searchInferenceEndpoints) {
       registerContextEngineInferenceFeatures(setupDeps.searchInferenceEndpoints);
     }
@@ -48,8 +74,12 @@ export class ContextEngineAgentBuilderPlugin
 
   start(
     _coreStart: CoreStart,
-    _startDeps: ContextEngineAgentBuilderStartDependencies
+    startDeps: ContextEngineAgentBuilderStartDependencies
   ): ContextEngineAgentBuilderPluginStart {
+    void installRoundCaptureWorkflow({
+      workflowsExtensions: startDeps.workflowsExtensions,
+      logger: this.logger.get('round_capture'),
+    });
     return {};
   }
 

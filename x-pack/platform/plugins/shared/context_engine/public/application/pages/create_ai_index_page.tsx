@@ -23,7 +23,6 @@ import React, { useState } from 'react';
 import { DEFAULT_AI_INDEX_TYPE, MAX_AI_INDEX_DESCRIPTION_LENGTH } from '../../../common/constants';
 import { CONTEXT_ENGINE_UI_EBT } from '../../../common/telemetry';
 import { AiIndexDescriptionField } from '../components/ai_index_description_field';
-import { MemorySettingsPanel } from '../components/memory_settings_panel';
 import { useContextEngineBreadcrumbs } from '../hooks/use_context_engine_breadcrumbs';
 import { useCreateAiIndex } from '../hooks/use_create_ai_index';
 import { useMemoryEnabled } from '../hooks/use_memory_enabled';
@@ -37,7 +36,11 @@ import {
   ContextEnginePageTemplate,
 } from '../layout/context_engine_page_template';
 import { AI_INDEX_CREATED_LOCATION_STATE } from '../ai_index_created_location_state';
-import { CONTEXT_ENGINE_PATHS, getAiIndexDetailPath } from '../paths';
+import {
+  CONTEXT_ENGINE_PATHS,
+  getAiIndexDetailPath,
+  getAiIndexDreamingTemplatePath,
+} from '../paths';
 import { validateAiIndexId } from '../utils/ai_index_dest';
 import { validateTextInput } from '../utils/validate_text_input';
 
@@ -55,7 +58,6 @@ export const CreateAiIndexPage = () => {
   const isMemoryFeatureEnabled = useMemoryEnabled();
   const [id, setId] = useState('');
   const [description, setDescription] = useState('');
-  const [memoryEnabled, setMemoryEnabled] = useState(true);
   const backHref = createContextEngineUrl(CONTEXT_ENGINE_PATHS.landing);
 
   useContextEngineBreadcrumbs([{ text: createPageTitle }]);
@@ -71,10 +73,14 @@ export const CreateAiIndexPage = () => {
     const created = await createAiIndex({
       id,
       description,
-      memoryEnabled: isMemoryFeatureEnabled ? memoryEnabled : undefined,
+      // Every AI index remembers when the memory feature is on.
+      memoryEnabled: isMemoryFeatureEnabled ? true : undefined,
       sources: [],
     });
-    if (created) {
+    // Dreaming needs memory, so only an AI index with memory gets to pick what it learns.
+    if (created && isMemoryFeatureEnabled) {
+      navigateToContextEngine(getAiIndexDreamingTemplatePath(created.id));
+    } else if (created) {
       navigateToContextEngine(
         getAiIndexDetailPath(created.id),
         undefined,
@@ -139,18 +145,6 @@ export const CreateAiIndexPage = () => {
             />
           </EuiFormRow>
         </EuiPanel>
-
-        {isMemoryFeatureEnabled && (
-          <>
-            <EuiSpacer size="l" />
-
-            <MemorySettingsPanel
-              checked={memoryEnabled}
-              onChange={({ target: { checked } }) => setMemoryEnabled(checked)}
-              toggleTestSubject="contextCreateAiIndexMemoryToggle"
-            />
-          </>
-        )}
 
         <EuiSpacer size="l" />
 

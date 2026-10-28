@@ -10,7 +10,10 @@ import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { KibanaRole, RoleApiCredentials } from '@kbn/scout';
 import { tags } from '@kbn/scout';
 import { expect } from '@kbn/scout/api';
-import { contextEngineAiIndexTools } from '@kbn/agent-builder-common/tools';
+import {
+  contextEngineAiIndexTools,
+  contextEngineRecallTools,
+} from '@kbn/agent-builder-common/tools';
 import { CONTEXT_ENGINE_ENABLED_SETTING_ID } from '@kbn/management-settings-ids';
 import {
   apiTest,
@@ -43,7 +46,7 @@ const API_HEADERS = {
 const TOOL = {
   list: mcpToolName(contextEngineAiIndexTools.listAiIndices),
   describe: mcpToolName(contextEngineAiIndexTools.describeAiIndex),
-  query: mcpToolName(contextEngineAiIndexTools.queryAiIndices),
+  recall: mcpToolName(contextEngineRecallTools.recall),
 };
 
 const AGENT_BUILDER_READ = { agentBuilder: ['read'] };
@@ -110,7 +113,7 @@ const runChain = async (client: Client) => {
   );
 
   const rows = resultOfType<EsqlResponse>(
-    await callToolForResults(client, TOOL.query, {
+    await callToolForResults(client, TOOL.recall, {
       query: `FROM ${entry.esql_target} | KEEP title | SORT title`,
       limit: 10,
     }),
@@ -217,7 +220,7 @@ apiTest.describe('AI Index tools over MCP', { tag: tags.stateful.classic }, () =
       for (const name of Object.values(TOOL)) {
         expect(byName.get(name)?.annotations?.readOnlyHint).toBe(true);
       }
-      expect(byName.get(TOOL.query)?.description).toContain('/s/{spaceId}/api/agent_builder/mcp');
+      expect(byName.get(TOOL.recall)?.description).toContain('/s/{spaceId}/api/agent_builder/mcp');
 
       expect(chain.listedIds).toContain(DEFAULT_ONLY_AI_INDEX_ID);
       expect(chain.entry).toStrictEqual({
@@ -271,7 +274,7 @@ apiTest.describe('AI Index tools over MCP', { tag: tags.stateful.classic }, () =
         Promise.all([
           callToolForResults(client, TOOL.list),
           callToolForResults(client, TOOL.describe, { ai_index_id: AI_INDEX_ID }),
-          callToolForResults(client, TOOL.query, { query: `FROM ${INDEX}` }),
+          callToolForResults(client, TOOL.recall, { query: `FROM ${INDEX}` }),
         ]),
       { credentials: mcpOnlyCredentials }
     );

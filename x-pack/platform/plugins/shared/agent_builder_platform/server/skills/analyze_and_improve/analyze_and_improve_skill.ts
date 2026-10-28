@@ -6,7 +6,11 @@
  */
 
 import { defineSkillType } from '@kbn/agent-builder-server/skills/type_definition';
-import { contextEngineAiIndexTools, platformCoreTools } from '@kbn/agent-builder-common/tools';
+import {
+  contextEngineAiIndexTools,
+  contextEngineRecallTools,
+  platformCoreTools,
+} from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
 import { kiShapesReference, strategyCatalogReference } from '../context_engine_shared';
 import { contextEngineSkillAvailability } from '../context_engine_skill_availability';
@@ -33,7 +37,7 @@ export const analyzeAndImproveSkill = defineSkillType({
     // Space-scoped reads of the KIs themselves.
     contextEngineAiIndexTools.listAiIndices,
     contextEngineAiIndexTools.describeAiIndex,
-    contextEngineAiIndexTools.queryAiIndices,
+    contextEngineRecallTools.recall,
     `${internalNamespaces.workflows}.get_workflow`,
   ],
 });

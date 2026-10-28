@@ -125,14 +125,14 @@ describe('CreateAiIndexPage', () => {
     expect(screen.getByTestId('contextCreateAiIndexButton')).toBeEnabled();
   });
 
-  it('creates with memory enabled by default when the global memory feature is enabled', async () => {
+  it('creates with memory, and no option to turn it off, when the global memory feature is enabled', async () => {
     mockUseMemoryEnabled.mockReturnValue(true);
     const services = coreMock.createStart();
     services.http.post.mockResolvedValue({});
 
     renderWithProviders(services);
 
-    expect(screen.getByTestId('contextCreateAiIndexMemoryToggle')).toBeChecked();
+    expect(screen.queryByTestId('contextCreateAiIndexMemoryToggle')).not.toBeInTheDocument();
 
     typeId(VALID_ID);
     fireEvent.click(screen.getByTestId('contextCreateAiIndexButton'));
@@ -147,13 +147,7 @@ describe('CreateAiIndexPage', () => {
     });
   });
 
-  it('does not show memory settings when the global memory feature is disabled', () => {
-    renderWithProviders(coreMock.createStart());
-
-    expect(screen.queryByTestId('contextCreateAiIndexMemoryToggle')).not.toBeInTheDocument();
-  });
-
-  it('creates the AI index with the selected memory setting', async () => {
+  it('goes on to choose what to learn when the global memory feature is enabled', async () => {
     mockUseMemoryEnabled.mockReturnValue(true);
     const services = coreMock.createStart();
     services.http.post.mockResolvedValue({});
@@ -161,23 +155,29 @@ describe('CreateAiIndexPage', () => {
     renderWithProviders(services);
 
     typeId(VALID_ID);
-    fireEvent.click(screen.getByTestId('contextCreateAiIndexMemoryToggle'));
     fireEvent.click(screen.getByTestId('contextCreateAiIndexButton'));
 
     await waitFor(() => {
-      expect(services.http.post).toHaveBeenCalledWith(
-        '/api/context_engine/ai_index',
-        expect.objectContaining({
-          body: JSON.stringify({
-            id: VALID_ID,
-            memory_enabled: false,
-            dest: { type: 'index', value: 'ai-index-idx-support-ticket-triage' },
-            automations: [],
-            sources: [],
-            traces: [],
-          }),
-        })
-      );
+      expect(services.application.navigateToApp).toHaveBeenCalledWith(CONTEXT_ENGINE_APP_ID, {
+        path: '/ai_index/support-ticket-triage/dreaming_template',
+      });
+    });
+  });
+
+  it('goes straight to the AI index when the global memory feature is disabled', async () => {
+    const services = coreMock.createStart();
+    services.http.post.mockResolvedValue({});
+
+    renderWithProviders(services);
+
+    typeId(VALID_ID);
+    fireEvent.click(screen.getByTestId('contextCreateAiIndexButton'));
+
+    await waitFor(() => {
+      expect(services.application.navigateToApp).toHaveBeenCalledWith(CONTEXT_ENGINE_APP_ID, {
+        path: '/ai_index/support-ticket-triage',
+        state: AI_INDEX_CREATED_LOCATION_STATE,
+      });
     });
   });
 

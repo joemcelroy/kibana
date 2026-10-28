@@ -60,10 +60,18 @@ export const graphifyOutputSchema = z.object({
   updated: z.number(),
   deleted: z.number(),
   rejected: z.number().describe('Change set items that failed validation and were dropped'),
+  access_patterns_dropped: z
+    .number()
+    .optional()
+    .describe('Access patterns dropped because their example query did not run'),
   operations: z
     .array(z.record(z.string(), z.unknown()))
     .optional()
     .describe('The planned changes. Only set on a dry run.'),
+  rejections: z
+    .array(z.object({ item: z.string(), reason: z.string() }))
+    .optional()
+    .describe('Why each rejected item was rejected. Only set on a dry run.'),
 });
 
 export const commitDreamingStateInputSchema = z.object({

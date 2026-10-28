@@ -8,7 +8,8 @@
 import type { ElasticsearchClient, Logger } from '@kbn/core/server';
 import { DEFAULT_DREAMING_GROUP_BY, cursorBeforeMemory } from '../../common/dreaming';
 import type { AiIndexService } from '../ai_indices/service';
-import { groupKeyOf, type ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import { groupKeyOf } from '../short_term_memory/service';
+import type { DreamingMemoryReader } from './memory_reader';
 import { markStale } from './apply';
 import { findKisDerivedFrom } from './long_term';
 import { queueRetries } from './state';
@@ -22,27 +23,30 @@ export interface ForgetMemoryResult {
 }
 
 /**
- * Deletes a short-term memory, flags every long-term KI derived from it as stale, and queues its
- * group for re-dreaming on each AI index that held one. The next run rewrites or deletes those
- * KIs.
+ * Flags every long-term KI derived from a short-term memory or transcript as stale, queues its group for
+ * re-dreaming on each AI index that held one, then deletes the memory. The next run rewrites or
+ * deletes those KIs. The memory goes last, so a write that fails leaves it to be forgotten again.
  */
 export const forgetMemory = async ({
   spaceId,
   memoryId,
-  shortTermMemory,
+  memoryReader,
   aiIndexService,
   esClient,
   logger,
 }: {
   spaceId: string;
   memoryId: string;
-  shortTermMemory: ShortTermMemoryServiceApi;
+  memoryReader: DreamingMemoryReader;
   aiIndexService: AiIndexService;
-  /** Writes the stale flags; forgetting must reach every AI index that used the memory. */
+  /**
+   * Writes the stale flags, as the user forgetting: AI index data is the user's, and Kibana's own
+   * user cannot write it on every deployment.
+   */
   esClient: ElasticsearchClient;
   logger: Logger;
 }): Promise<ForgetMemoryResult> => {
-  const memory = await shortTermMemory.forget(spaceId, memoryId);
+  const [memory] = await memoryReader.getByIds(spaceId, [memoryId]);
   if (!memory) {
     return { forgotten: false, ai_index_ids: [] };
   }
@@ -74,5 +78,6 @@ export const forgetMemory = async ({
       `Forgot memory '${memoryId}': ${marked} KIs in AI index '${aiIndexId}' will be re-dreamed`
     );
   }
+  await memoryReader.forget(spaceId, memoryId);
   return { forgotten: true, ai_index_ids: affected };
 };

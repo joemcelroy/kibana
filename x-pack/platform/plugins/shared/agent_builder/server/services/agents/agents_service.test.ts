@@ -210,19 +210,23 @@ describe('AgentsService', () => {
       it('grants the default AI index to chat agents that have none', async () => {
         const resolved = await resolve({ tools: [], ai_indices: [] });
 
-        expect(resolved.ai_indices).toEqual([agentBuilderDefaultAiIndexId]);
+        expect(resolved.ai_indices).toEqual([agentBuilderDefaultAiIndexId, 'user-memories']);
       });
 
       it("unions the default AI index with the agent's own", async () => {
         const resolved = await resolve({ tools: [], ai_indices: ['custom-index'] });
 
-        expect(resolved.ai_indices).toEqual([agentBuilderDefaultAiIndexId, 'custom-index']);
+        expect(resolved.ai_indices).toEqual([
+          agentBuilderDefaultAiIndexId,
+          'custom-index',
+          'user-memories',
+        ]);
       });
 
       it('derives the chat type defaults from the default AI indices map', async () => {
         const resolved = await resolve({ tools: [], ai_indices: [] });
 
-        expect(resolved.ai_indices).toEqual(Object.keys(defaultAiIndices));
+        expect(resolved.ai_indices).toEqual([...Object.keys(defaultAiIndices), 'user-memories']);
       });
     });
 

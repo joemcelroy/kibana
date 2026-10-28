@@ -10,6 +10,8 @@ export const CONTEXT_ENGINE_PATHS = {
   create: '/ai_index/create',
   detail: '/ai_index/:id',
   detailKnowledgeIndicators: '/ai_index/:id/knowledge_indicators',
+  detailSettings: '/ai_index/:id/settings',
+  dreamingTemplate: '/ai_index/:id/dreaming_template',
   viewKi: '/ai_index/:id/ki/:kiId*',
 } as const;
 
@@ -17,6 +19,12 @@ export const getAiIndexDetailPath = (id: string): string => `/ai_index/${id}`;
 
 export const getAiIndexKnowledgeIndicatorsPath = (id: string): string =>
   `/ai_index/${id}/knowledge_indicators`;
+
+export const getAiIndexSettingsPath = (id: string): string => `/ai_index/${id}/settings`;
+
+/** The step after creating an AI index with memory: pick an example dreaming config. */
+export const getAiIndexDreamingTemplatePath = (id: string): string =>
+  `/ai_index/${id}/dreaming_template`;
 
 /**
  * KI ids are free-form (set by automations, no format restriction) and can

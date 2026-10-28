@@ -29,14 +29,14 @@ import { validateFeedbackAnalysisInterval } from '../../../common/validation';
 import { DREAMING_TYPE_PATTERN } from '../../dreaming/resolve_change_set';
 
 const MAX_EXECUTION_ID_LENGTH = 256;
-const MAX_TIMESTAMP_LENGTH = 64;
+export const MAX_TIMESTAMP_LENGTH = 64;
 
 const validateType = (value: string): string | undefined =>
   DREAMING_TYPE_PATTERN.test(value)
     ? undefined
     : 'Must use lowercase letters, digits, and underscores only.';
 
-const validateTimestamp = (value: string): string | undefined =>
+export const validateTimestamp = (value: string): string | undefined =>
   Number.isNaN(Date.parse(value)) ? 'Must be an ISO 8601 date.' : undefined;
 
 const typeSchema = schema.string({
@@ -102,6 +102,22 @@ export const dreamingConfigSchema = schema.object({
       }),
       { maxSize: MAX_DREAMING_RELATIONSHIP_TYPES }
     )
+  ),
+  sessions: schema.maybe(
+    schema.boolean({
+      meta: {
+        description:
+          'Also keep one `memory.session` KI per session: a dated summary of what happened in it.',
+      },
+    })
+  ),
+  rounds: schema.maybe(
+    schema.boolean({
+      meta: {
+        description:
+          "Dream recorded conversation rounds (transcripts) as well as short-term memories. Defaults to `true`. In a shared AI index, what is dreamed from a user's round is visible to everyone who reads the AI index.",
+      },
+    })
   ),
 });
 

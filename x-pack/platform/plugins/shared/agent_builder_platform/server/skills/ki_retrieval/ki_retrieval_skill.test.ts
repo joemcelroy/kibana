@@ -6,7 +6,10 @@
  */
 
 import { isAllowedBuiltinSkill } from '@kbn/agent-builder-server/allow_lists';
-import { contextEngineAiIndexTools } from '@kbn/agent-builder-common/tools';
+import {
+  contextEngineAiIndexTools,
+  contextEngineRecallTools,
+} from '@kbn/agent-builder-common/tools';
 import { contextEngineSkillAvailability } from '../context_engine_skill_availability';
 import { kiRetrievalSkill } from './ki_retrieval_skill';
 
@@ -43,7 +46,7 @@ describe('kiRetrievalSkill', () => {
 
   it('routes every AI-index query through the space-scoped query tool', () => {
     expect(kiRetrievalSkill.content).toContain(
-      `every AI-index query below through\n\`${contextEngineAiIndexTools.queryAiIndices}\``
+      `every AI-index query below through\n\`${contextEngineRecallTools.recall}\``
     );
     expect(kiRetrievalSkill.content).not.toContain('"filter"');
   });
@@ -80,6 +83,9 @@ describe('kiRetrievalSkill', () => {
   it('binds the Context Engine AI index tools', async () => {
     const toolIds = (await kiRetrievalSkill.getRegistryTools?.()) ?? [];
 
-    expect(toolIds).toEqual(Object.values(contextEngineAiIndexTools));
+    expect(toolIds).toEqual([
+      ...Object.values(contextEngineAiIndexTools),
+      contextEngineRecallTools.recall,
+    ]);
   });
 });

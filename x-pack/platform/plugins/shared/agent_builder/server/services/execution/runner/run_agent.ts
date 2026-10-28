@@ -200,6 +200,7 @@ export const runAgent = async ({
       conversation: agentParams.conversation,
       requestOrigin: agentParams.origin?.type,
     }),
+    ...(effectiveConfiguration?.ai_indices && { aiIndices: effectiveConfiguration.ai_indices }),
   });
 
   // Stored defaults are read from the agent itself, never from runtime overrides.

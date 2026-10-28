@@ -14,6 +14,7 @@ import {
   type UpsertEntityOperation,
   type UpsertFactOperation,
 } from './resolve_change_set';
+import { sessionKiId } from './ids';
 
 const existingEntity: DreamedKi = {
   id: 'alice/entity-person-bob',
@@ -64,6 +65,7 @@ describe('resolveChangeSet', () => {
             ref: 'new:1',
             type: 'team',
             name: 'Platform Team',
+            content: 'The team Bob is a member of.',
             source_memory_ids: ['m-1'],
           },
         ],
@@ -94,6 +96,7 @@ describe('resolveChangeSet', () => {
     expect(entity).toMatchObject({
       op: 'upsert_entity',
       id: 'alice/entity-team-platform-team',
+      content: 'The team Bob is a member of.',
       sessionIds: ['s-1'],
     });
     const fact = operations[1] as UpsertFactOperation;
@@ -235,5 +238,104 @@ describe('resolveChangeSet', () => {
       context({ existing: new Map([[stale.id, stale]]) })
     );
     expect(operations).toEqual([{ op: 'clear_stale', id: stale.id }]);
+  });
+
+  it('treats an entity ref it does not know as a new key, so facts can refer to it', () => {
+    const { operations, rejected } = resolveChangeSet(
+      changeSet({
+        entities: [
+          { ref: 'person:carol', type: 'person', name: 'Carol', source_memory_ids: ['m-1'] },
+        ],
+        facts: [
+          {
+            ref: 'new:1',
+            type: 'preference',
+            title: 'Carol likes tea',
+            content: 'Carol likes tea.',
+            about: ['person:carol'],
+            source_memory_ids: ['m-1'],
+          },
+        ],
+      }),
+      context()
+    );
+    expect(rejected).toEqual([]);
+    expect(operations.map(({ op }) => op)).toEqual(['upsert_entity', 'upsert_fact']);
+    expect((operations[1] as UpsertFactOperation).about).toEqual(['alice/entity-person-carol']);
+  });
+
+  describe('session documents', () => {
+    const currentSession: DreamedKi = {
+      id: 'alice/session-current',
+      type: 'memory.session',
+      title: 'Planning the offsite',
+      content: '2026-10-20: Alice planned the offsite.',
+      attributes: { 'memory.session_id': 's-1' },
+      references: [{ uri: 'memory://m-old', relation: 'derived_from' }],
+    };
+
+    it('writes one document per session, citing every memory of it', () => {
+      const { operations, rejected } = resolveChangeSet(
+        changeSet({
+          sessions: [{ session_id: 's-1', title: 'Offsite', summary: '2026-10-25: Booked it.' }],
+        }),
+        context({ sessions: new Map([['s-1', undefined]]) })
+      );
+      expect(rejected).toEqual([]);
+      expect(operations).toEqual([
+        {
+          op: 'upsert_session',
+          id: sessionKiId('alice', 's-1'),
+          sessionId: 's-1',
+          title: 'Offsite',
+          content: '2026-10-25: Booked it.',
+          sourceMemoryIds: ['m-1', 'm-2'],
+        },
+      ]);
+    });
+
+    it('updates the session’s current document and keeps what it left out', () => {
+      const { operations } = resolveChangeSet(
+        changeSet({ sessions: [{ session_id: 's-1', summary: 'Updated.' }] }),
+        context({ sessions: new Map([['s-1', currentSession]]) })
+      );
+      expect(operations).toEqual([
+        {
+          op: 'upsert_session',
+          id: currentSession.id,
+          sessionId: 's-1',
+          title: 'Planning the offsite',
+          content: 'Updated.',
+          sourceMemoryIds: ['m-old', 'm-1', 'm-2'],
+        },
+      ]);
+    });
+
+    it('rejects sessions outside the task, or when the config keeps none', () => {
+      expect(
+        resolveChangeSet(
+          changeSet({ sessions: [{ session_id: 's-9', title: 'x', summary: 'y' }] }),
+          context({ sessions: new Map([['s-1', undefined]]) })
+        ).rejected
+      ).toEqual([{ item: 'session s-9', reason: "'s-9' is not a session of this task" }]);
+      expect(
+        resolveChangeSet(
+          changeSet({ sessions: [{ session_id: 's-1', title: 'x', summary: 'y' }] }),
+          context()
+        ).rejected
+      ).toEqual([{ item: 'session s-1', reason: 'this AI index does not keep session documents' }]);
+    });
+
+    it('clears the stale flag on a session document the model left out', () => {
+      const stale: DreamedKi = {
+        ...currentSession,
+        governance: { lifecycle: { status: 'stale' } },
+      } as DreamedKi;
+      const { operations } = resolveChangeSet(
+        changeSet({}),
+        context({ sessions: new Map([['s-1', stale]]) })
+      );
+      expect(operations).toEqual([{ op: 'clear_stale', id: stale.id }]);
+    });
   });
 });

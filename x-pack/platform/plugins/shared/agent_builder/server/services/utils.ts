@@ -64,31 +64,44 @@ export const toStableUserId = async ({
     return undefined;
   }
 
-  const realmType = authUser.authentication_realm?.type;
-  const realmName = authUser.authentication_realm?.name;
-  const { username } = authUser;
-  if (!realmType || !realmName || !username) {
-    return undefined;
-  }
-
-  return `${REALM_USER_ID_PREFIX}${JSON.stringify([realmType, realmName, username])}`;
+  return toRealmUserId(
+    authUser.authentication_realm?.type,
+    authUser.authentication_realm?.name,
+    authUser.username
+  );
 };
 
+const toRealmUserId = (
+  realmType: string | undefined,
+  realmName: string | undefined,
+  username: string | undefined
+): string | undefined =>
+  realmType && realmName && username
+    ? `${REALM_USER_ID_PREFIX}${JSON.stringify([realmType, realmName, username])}`
+    : undefined;
+
+interface ApiKeyOwner {
+  profileUid?: string;
+  /** The creator's realm-qualified id, as `toStableUserId` builds it for their realm requests. */
+  realmId?: string;
+}
+
 /**
- * Resolves the API key creator's profile uid via Elasticsearch, when available.
+ * Looks up the API key's creator via Elasticsearch, when available.
  *
  * `getCurrentUser` for API-key auth often omits `profile_uid`. Looking up the key with
  * `with_profile_uid` recovers the creator's profile so ownership can match interactive
- * sessions for the same user. Older keys or creators without an activated profile return
- * undefined and callers fall back to username matching.
+ * sessions for the same user. Older keys or creators without an activated profile have no
+ * profile uid and callers fall back to username matching. The key also records the realm its
+ * creator authenticated with, which gives the id their requests without a profile are known by.
  */
-const resolveApiKeyOwnerProfileUid = async ({
+const lookupApiKeyOwner = async ({
   request,
   esClient,
 }: {
   request: KibanaRequest;
   esClient: ElasticsearchClient;
-}): Promise<string | undefined> => {
+}): Promise<ApiKeyOwner | undefined> => {
   const id = extractApiKeyIdFromAuthzHeader(request.headers.authorization);
   if (!id) {
     return undefined;
@@ -99,8 +112,15 @@ const resolveApiKeyOwnerProfileUid = async ({
       with_profile_uid: true,
       id,
     });
-
-    return response.api_keys?.[0]?.profile_uid;
+    const key = response.api_keys?.[0];
+    if (!key) {
+      return undefined;
+    }
+    const realmId = toRealmUserId(key.realm_type, key.realm, key.username);
+    return {
+      ...(key.profile_uid && { profileUid: key.profile_uid }),
+      ...(realmId && { realmId }),
+    };
   } catch (error) {
     if (
       error instanceof errors.ResponseError &&
@@ -154,12 +174,20 @@ export const getUserFromRequest = async ({
     };
   }
 
-  const resolveApiKeyProfileUid = () => resolveApiKeyOwnerProfileUid({ request, esClient });
+  // Looked up at most once, and only when the request's user carries no profile uid.
+  let apiKeyOwner: Promise<ApiKeyOwner | undefined> | undefined;
+  const resolveApiKeyProfileUid = async () =>
+    (await (apiKeyOwner ??= lookupApiKeyOwner({ request, esClient })))?.profileUid;
+  // The key creator's realm id, when it differs from the id: what they own without a profile.
+  const realmIdOf = async (id: string | undefined) => {
+    const realmId = apiKeyOwner && (await apiKeyOwner)?.realmId;
+    return realmId && realmId !== id ? { realmId } : {};
+  };
 
   if (authUser?.username) {
     const id = await toStableUserId({ authUser, request, resolveApiKeyProfileUid });
 
-    return { id, username: authUser.username, type: 'user', isAdmin };
+    return { id, username: authUser.username, type: 'user', isAdmin, ...(await realmIdOf(id)) };
   }
 
   // A user on this path may have a profile that `getCurrentUser` could not see; a realm id would
@@ -167,7 +195,7 @@ export const getUserFromRequest = async ({
   const { username } = await esClient.security.authenticate();
   const id = await toStableUserId({ authUser: authUser ?? {}, request, resolveApiKeyProfileUid });
 
-  return { id, username, type: 'user', isAdmin };
+  return { id, username, type: 'user', isAdmin, ...(await realmIdOf(id)) };
 };
 
 const ADMIN_PRIVILEGE = 'agent_builder:admin'; // intentionally unregistered privilege

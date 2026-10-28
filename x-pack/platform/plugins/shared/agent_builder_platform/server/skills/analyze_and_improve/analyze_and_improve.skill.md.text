@@ -101,7 +101,7 @@ A **KI** is a structured fact stored in a searchable AI index or datastream (bac
 `ai-index-ds-*` for timeseries KIs, `ai-index-idx-*` otherwise). Workflows write KIs through the
 `context-engine` steps using the AI index id — never by indexing into the backing store directly.
 
-Agents retrieve through `platform.context_engine.query_ai_indices`, which returns only current,
+Agents retrieve through `platform.context_engine.recall`, which, given an ES|QL query, returns only current,
 active, unexpired KIs: on a data stream the newest revision per `id`, never one whose
 `governance.lifecycle.status` is `deleted` or whose `expires_at` has passed, and with
 `governance` dropped. Those are the KIs an agent can retrieve. A top-level `WHERE` command on
@@ -398,7 +398,7 @@ Before proposing a change to something, read it.
 - **The KIs themselves.** `platform.context_engine.list_ai_indices` lists the AI indices and the
   target each is queried through, `platform.context_engine.describe_ai_index` gives one index's
   fields and example queries, and
-  `platform.context_engine.query_ai_indices` samples them with the space filter applied
+  `platform.context_engine.recall` samples them with the space filter applied
   server-side; never read an AI index with `platform.core.execute_esql`. It already reads the
   newest revision per `id` and hides deleted and expired KIs, as `ki_shapes` describes, so what it
   returns is what an agent can retrieve. Aggregating by `type` and `tags` tells you what the

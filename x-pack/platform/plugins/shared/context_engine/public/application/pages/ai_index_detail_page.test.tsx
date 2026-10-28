@@ -30,6 +30,7 @@ import {
   CONTEXT_ENGINE_PATHS,
   getAiIndexDetailPath,
   getAiIndexKnowledgeIndicatorsPath,
+  getAiIndexSettingsPath,
 } from '../paths';
 import { CONTEXT_ENGINE_BACK_BUTTON_TEST_SUBJ } from '../layout/context_engine_page_header';
 import { AiIndexDetailPage } from './ai_index_detail_page';
@@ -39,6 +40,7 @@ import { useMemoryEnabled } from '../hooks/use_memory_enabled';
 const AI_INDEX_DETAIL_ROUTE_PATHS = [
   CONTEXT_ENGINE_PATHS.detail,
   CONTEXT_ENGINE_PATHS.detailKnowledgeIndicators,
+  CONTEXT_ENGINE_PATHS.detailSettings,
 ] as const;
 
 jest.mock('@kbn/esql/public', () => ({
@@ -413,21 +415,9 @@ describe('AiIndexDetailPage', () => {
     expect(screen.getByTestId(APP_HEADER_TEST_SUBJECTS.tabs)).toBeInTheDocument();
   });
 
-  it('renders the per-index memory toggle when memory is globally enabled', async () => {
+  it('has no per-index memory option', async () => {
     const services = createServices();
     services.http.get.mockResolvedValue(aiIndex);
-
-    renderWithProviders(services);
-
-    await waitForAiIndexDetailLoaded();
-
-    expect(screen.getByTestId('contextAiIndexMemoryToggle')).toBeInTheDocument();
-  });
-
-  it('hides the per-index memory toggle when memory is globally disabled', async () => {
-    const services = createServices();
-    services.http.get.mockResolvedValue(aiIndex);
-    mockUseMemoryEnabled.mockReturnValue(false);
 
     renderWithProviders(services);
 
@@ -937,6 +927,56 @@ describe('AiIndexDetailPage', () => {
     expect(screen.getByTestId('contextListKiDiscoverLink')).toHaveAttribute(
       'href',
       '/app/discover'
+    );
+  });
+
+  it('shows the dreaming config as JSON on the Settings tab', async () => {
+    const dreaming = {
+      enabled: true,
+      group_by: 'user_id',
+      state: { retry: [], cursor: { timestamp: '2026-10-26T08:00:00.000Z', memory_id: 'm-1' } },
+    };
+    const services = createServices();
+    services.http.get.mockImplementation((async (path: string) =>
+      path.endsWith('/_dreaming') ? { dreaming } : aiIndex) as typeof services.http.get);
+    const history = createMemoryHistory({
+      initialEntries: [{ pathname: getAiIndexDetailPath(aiIndex.id) }],
+    });
+    services.application.navigateToApp.mockImplementation(async (_appId, options) => {
+      history.push(options?.path ?? '');
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <ChromeServiceProvider value={{ chrome: services.chrome }}>
+        <I18nProvider>
+          <EuiProvider>
+            <KibanaContextProvider
+              services={{ ...services, triggersActionsUi: triggersActionsUiMock.createStart() }}
+            >
+              <QueryClientProvider client={queryClient}>
+                <Router history={history}>
+                  <Route path={AI_INDEX_DETAIL_ROUTE_PATHS} exact component={AiIndexDetailPage} />
+                </Router>
+              </QueryClientProvider>
+            </KibanaContextProvider>
+          </EuiProvider>
+        </I18nProvider>
+      </ChromeServiceProvider>
+    );
+    await waitForAiIndexDetailLoaded();
+    expect(screen.queryByTestId('contextAiIndexDreamingPanel')).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByTestId('contextAiIndexDetailTab-settings'));
+
+    expect(history.location.pathname).toBe(getAiIndexSettingsPath(aiIndex.id));
+    const json = await screen.findByTestId('contextAiIndexDreamingJson');
+    expect(json).toHaveTextContent('"group_by": "user_id"');
+    expect(json).toHaveTextContent('"memory_id": "m-1"');
+    expect(screen.queryByTestId('contextAiIndexSourceRow')).not.toBeInTheDocument();
+    expect(services.http.get).toHaveBeenCalledWith(
+      `/api/context_engine/ai_index/${aiIndex.id}/_dreaming`,
+      expect.objectContaining({ version: '2023-10-31' })
     );
   });
 

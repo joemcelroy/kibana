@@ -88,6 +88,8 @@ export const EditDetailsFlyout: React.FC<EditDetailsFlyoutProps> = ({
         post_execution_workflow_ids: agent.configuration?.post_execution_workflow_ids ?? [],
         instructions: agent.configuration?.instructions ?? '',
         ai_indices: agent.configuration?.ai_indices ?? [],
+        enable_elastic_ai_index: agent.configuration?.enable_elastic_ai_index,
+        enable_user_memory: agent.configuration?.enable_user_memory,
         subagent_ids: agent.configuration?.subagent_ids ?? [],
         auto_approved_apis: agent.configuration?.approvals?.auto_approved_apis ?? {},
       },
@@ -114,6 +116,8 @@ export const EditDetailsFlyout: React.FC<EditDetailsFlyoutProps> = ({
           post_execution_workflow_ids: data.configuration.post_execution_workflow_ids,
           instructions: data.configuration.instructions,
           ai_indices: data.configuration.ai_indices,
+          enable_elastic_ai_index: data.configuration.enable_elastic_ai_index,
+          enable_user_memory: data.configuration.enable_user_memory,
           subagent_ids: data.configuration.subagent_ids,
           ...(canUpdateAgentApprovals && {
             approvals: { auto_approved_apis: data.configuration.auto_approved_apis },

@@ -10,6 +10,8 @@ export {
   chatAgentTypeId,
   agentBuilderDefaultAgentId,
   agentBuilderDefaultAiIndexId,
+  agentBuilderUserMemoriesAiIndexId,
+  agentBuilderRoundCaptureWorkflowId,
   kiRetrievalSkillId,
   type AgentDefinition,
   type AgentApprovals,

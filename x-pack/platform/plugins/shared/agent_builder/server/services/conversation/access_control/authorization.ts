@@ -22,8 +22,9 @@ export const isConversationOwner = ({
   owner: ConversationOwner;
   user: CurrentUser;
 }): boolean => {
-  if (owner.userId !== undefined && user.id !== undefined) {
-    return owner.userId === user.id;
+  if (owner.userId !== undefined && (user.id !== undefined || user.realmId !== undefined)) {
+    // An API key's creator also owns what their requests without a profile created.
+    return owner.userId === user.id || owner.userId === user.realmId;
   }
 
   // Only for conversations stored without an owner profile uid: legacy ones, and ones created by

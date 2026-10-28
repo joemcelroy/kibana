@@ -29,8 +29,8 @@ import {
   InvalidDreamingConfigError,
 } from '../dreaming/errors';
 import type { DreamingScheduleService } from '../dreaming/schedule';
-import { applyStateUpdate, runningExecutionId, stateOf } from '../dreaming/state';
-import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import { applyStateUpdate } from '../dreaming/state';
+import type { DreamingMemoryReader } from '../dreaming/memory_reader';
 import { resolveSpaceId } from '../utils/resolve_space_id';
 import { handleAiIndexError } from './ai_indices';
 import { aiIndexIdParamsSchema } from './schemas/ai_indices_schema';
@@ -55,7 +55,11 @@ const PUBLIC_OPTIONS = {
   availability: { stability: 'experimental' as const, since: '9.7.0' },
 };
 
-const handleDreamingError = (error: unknown, response: KibanaResponseFactory, logger: Logger) => {
+export const handleDreamingError = (
+  error: unknown,
+  response: KibanaResponseFactory,
+  logger: Logger
+) => {
   if (
     error instanceof InvalidDreamingConfigError ||
     error instanceof DreamingModelUnavailableError
@@ -75,14 +79,14 @@ export const registerDreamingRoutes = ({
   router,
   logger,
   getAiIndexService,
-  getShortTermMemory,
+  getMemoryReader,
   getDreamingSchedule,
   getSpaces,
 }: {
   router: IRouter;
   logger: Logger;
   getAiIndexService: () => AiIndexService;
-  getShortTermMemory: () => ShortTermMemoryServiceApi;
+  getMemoryReader: () => DreamingMemoryReader;
   getDreamingSchedule: () => DreamingScheduleService;
   getSpaces: () => Promise<SpacesPluginStart | undefined>;
 }): void => {
@@ -203,7 +207,7 @@ export const registerDreamingRoutes = ({
       access: 'public',
       summary: 'Dream now',
       description:
-        'Starts a dreaming run of an AI Index now, optionally for one session or user, and returns its run id. Fails with a 409 while another run is in progress.',
+        'Starts a dreaming run of an AI Index now, optionally for one session or user, and returns its run id. A run requested while another is in progress waits for it to finish.',
       options: PUBLIC_OPTIONS,
     })
     .addVersion(
@@ -224,12 +228,6 @@ export const registerDreamingRoutes = ({
             aiIndexService,
             currentUserClient: core.elasticsearch.client.asCurrentUser,
           });
-          const running = runningExecutionId(
-            stateOf(await aiIndexService.getDreaming(aiIndexId, spaceId))
-          );
-          if (running !== undefined) {
-            throw new DreamingRunInProgressError(aiIndexId, running);
-          }
           const runId = await getDreamingSchedule().run({
             aiIndexId,
             spaceId,
@@ -270,18 +268,20 @@ export const registerDreamingRoutes = ({
         const spaceId = resolveSpaceId(await getSpaces(), request);
         try {
           const aiIndexService = getAiIndexService();
-          await authorizeDreaming({
+          const aiIndex = await authorizeDreaming({
             aiIndexId,
             spaceId,
             aiIndexService,
             currentUserClient: core.elasticsearch.client.asCurrentUser,
           });
           const dreaming = await aiIndexService.getDreaming(aiIndexId, spaceId);
-          const body = await getShortTermMemory().pull(spaceId, {
+          const body = await getMemoryReader().pull(spaceId, {
+            userScoped: aiIndex.memory_scope === 'user',
             after,
             until,
             groupBy: dreaming?.group_by ?? DEFAULT_DREAMING_GROUP_BY,
             groupKeys,
+            aiIndexId,
             size,
           });
           return response.ok({ body });

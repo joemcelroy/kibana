@@ -9,6 +9,11 @@ import { schema } from '@kbn/config-schema';
 import { agentIdMaxLength } from '@kbn/agent-builder-common/agents';
 import type { Logger } from '@kbn/logging';
 import type { KibanaRequest } from '@kbn/core/server';
+import type { AgentConfiguration } from '@kbn/agent-builder-common';
+import type {
+  AgentBaseConfiguration,
+  BuiltinAiIndexSwitches,
+} from '@kbn/agent-builder-server/agents';
 import type { RouteDependencies } from '../types';
 import { getHandlerWrapper } from '../wrap_handler';
 import type {
@@ -26,8 +31,18 @@ import { resolveExecutionConnectorId } from '../../services/execution/utils';
 
 interface InheritedAiIndicesResolveResult {
   inherited: string[];
+  base?: AgentBaseConfiguration;
   error?: string;
 }
+
+/** The agent's own built-in AI index switches, falling back to its type's. */
+const switchesOf = (
+  configuration: AgentConfiguration,
+  base: AgentBaseConfiguration | undefined
+): BuiltinAiIndexSwitches => ({
+  enable_elastic_ai_index: configuration.enable_elastic_ai_index ?? base?.enable_elastic_ai_index,
+  enable_user_memory: configuration.enable_user_memory ?? base?.enable_user_memory,
+});
 
 const resolveInheritedAiIndicesForType = async ({
   agentsService,
@@ -42,7 +57,7 @@ const resolveInheritedAiIndicesForType = async ({
 }): Promise<InheritedAiIndicesResolveResult> => {
   try {
     const base = await agentsService.resolveAgentBaseConfiguration({ agentType, request });
-    return { inherited: base?.ai_indices ?? [] };
+    return { inherited: base?.ai_indices ?? [], base };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
@@ -96,13 +111,14 @@ export function registerInternalAgentRoutes({
       );
 
       const results = agents.map((agent) => {
-        const { inherited } = aiIndicesByType.get(agent.type) ?? { inherited: [] };
+        const { inherited, base } = aiIndicesByType.get(agent.type) ?? { inherited: [] };
 
         return {
           agent_id: agent.id,
           ai_indices: buildEffectiveAgentAiIndices({
             inherited,
             assigned: agent.configuration.ai_indices ?? [],
+            switches: switchesOf(agent.configuration, base),
           }),
         };
       });
@@ -145,7 +161,7 @@ export function registerInternalAgentRoutes({
       const { agents: agentsService } = getInternalServices();
       const registry = await agentsService.getRegistry({ request });
       const agent = await registry.get(request.params.id);
-      const { inherited, error } = await resolveInheritedAiIndicesForType({
+      const { inherited, base, error } = await resolveInheritedAiIndicesForType({
         agentsService,
         agentType: agent.type,
         request,
@@ -161,6 +177,7 @@ export function registerInternalAgentRoutes({
           ai_indices: buildEffectiveAgentAiIndices({
             inherited,
             assigned: agent.configuration.ai_indices ?? [],
+            switches: switchesOf(agent.configuration, base),
           }),
           ...(warnings.length > 0 ? { warnings } : {}),
         },

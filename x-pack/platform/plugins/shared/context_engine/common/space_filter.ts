@@ -16,6 +16,32 @@ const SPACE_FIELD = `${AI_INDEX_PRIVILEGES_PATH}.space`;
  * comes from `asCurrentUser`. `ignore_unmapped` keeps indices lacking this field. Explicit
  * `minimum_should_match: 1` required for FORK filter pushdown; do not drop.
  */
+/** Matches documents of `dest`'s backing indices. */
+const inDest = ({ type, value }: { type: string; value: string }): QueryDslQueryContainer =>
+  type === 'data_stream' ? { prefix: { _index: `.ds-${value}-` } } : { term: { _index: value } };
+
+/**
+ * ES|QL `filter` that keeps a caller to their own KIs in AI indices that keep each user's memory
+ * apart: there, a KI's id starts with its owner's user id. A caller can own KIs under more than
+ * one id, their profile uid and their username, as Agent Builder matches users. Other indices
+ * pass through. A caller with no user id sees no KI of those indices.
+ */
+export const buildAiIndexUserFilter = (
+  userScopedDests: ReadonlyArray<{ type: string; value: string }>,
+  userIds: readonly string[]
+): QueryDslQueryContainer | undefined =>
+  userScopedDests.length === 0
+    ? undefined
+    : {
+        bool: {
+          should: [
+            { bool: { must_not: userScopedDests.map(inDest) } },
+            ...userIds.map((userId) => ({ prefix: { id: `${userId}/` } })),
+          ],
+          minimum_should_match: 1,
+        },
+      };
+
 export const buildAiIndexSpaceFilter = (spaceId: string): QueryDslQueryContainer => ({
   bool: {
     should: [

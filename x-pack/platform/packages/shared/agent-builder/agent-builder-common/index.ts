@@ -169,6 +169,8 @@ export type { TimeRange } from './attachments';
 export {
   agentBuilderDefaultAgentId,
   agentBuilderDefaultAiIndexId,
+  agentBuilderUserMemoriesAiIndexId,
+  agentBuilderRoundCaptureWorkflowId,
   kiRetrievalSkillId,
   AgentType,
   chatAgentTypeId,

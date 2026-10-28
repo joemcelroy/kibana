@@ -10,10 +10,15 @@ tags:
   - scheduled
 settings:
   timeout: '45m'
+  # One run at a time per AI index. A run requested while another is running waits for it
+  # (remember's dreamNow, _dream, the schedule) instead of being dropped. Anything that falls
+  # off the bounded queue is still after the cursor, so the next scheduled run dreams it.
   concurrency:
     key: 'context-engine-dreaming-__AI_INDEX_ID__'
-    strategy: drop
+    strategy: queue
     max: 1
+    queue-size: 20
+    queue-ttl: '2h'
 consts:
   AI_INDEX_ID: '__AI_INDEX_ID__'
 outputs:

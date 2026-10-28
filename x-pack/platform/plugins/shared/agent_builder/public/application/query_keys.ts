@@ -96,6 +96,11 @@ export const queryKeys = {
   },
   aiIndices: {
     list: ['aiIndices', 'list'] as const,
+    ownMemory: (aiIndexIds?: readonly string[]) =>
+      ['aiIndices', 'ownMemory', ...(aiIndexIds ?? ['*'])] as const,
+  },
+  memory: {
+    learnFromConversations: ['memory', 'learnFromConversations'] as const,
   },
   spaceSettings: {
     all: ['spaceSettings'] as const,

@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import type { UserIdAndName } from '@kbn/agent-builder-common';
+import type { CurrentUser, UserIdAndName } from '@kbn/agent-builder-common';
 import { ConversationAccessControlMode } from '@kbn/agent-builder-common';
 
 /**
@@ -20,11 +20,18 @@ const buildPublicConversationFilter = () => {
  * username only when it did not (legacy conversations, and ones created by callers without a
  * profile). Mirrors `isConversationOwner`.
  */
-const buildOwnedConversationFilter = ({ user }: { user: UserIdAndName }) => {
+const buildOwnedConversationFilter = ({
+  user,
+}: {
+  user: UserIdAndName & Pick<CurrentUser, 'realmId'>;
+}) => {
   const shouldClauses: Array<Record<string, unknown>> = [];
 
   if (user.id !== undefined) {
     shouldClauses.push({ term: { user_id: user.id } });
+  }
+  if (user.realmId !== undefined) {
+    shouldClauses.push({ term: { user_id: user.realmId } });
   }
 
   shouldClauses.push({
@@ -72,7 +79,7 @@ export const buildReadAccessFilter = ({
   user,
   agentIds,
 }: {
-  user: UserIdAndName;
+  user: UserIdAndName & Pick<CurrentUser, 'realmId'>;
   agentIds: string[];
 }) => {
   const shouldClauses: Array<Record<string, unknown>> = [

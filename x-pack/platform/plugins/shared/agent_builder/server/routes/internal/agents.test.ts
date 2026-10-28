@@ -133,12 +133,16 @@ describe('registerInternalAgentRoutes', () => {
           agent_id: 'chat-agent',
           ai_indices: [
             { id: 'elastic', is_default: true },
+            { id: 'user-memories', is_default: true },
             { id: 'my-index', is_default: false },
           ],
         },
         {
           agent_id: 'discovery-agent',
-          ai_indices: [{ id: 'another-one', is_default: true }],
+          ai_indices: [
+            { id: 'another-one', is_default: true },
+            { id: 'user-memories', is_default: true },
+          ],
         },
       ]);
     });
@@ -170,11 +174,17 @@ describe('registerInternalAgentRoutes', () => {
       expect(result.body.results).toEqual([
         {
           agent_id: 'chat-agent',
-          ai_indices: [{ id: 'my-index', is_default: false }],
+          ai_indices: [
+            { id: 'user-memories', is_default: true },
+            { id: 'my-index', is_default: false },
+          ],
         },
         {
           agent_id: 'discovery-agent',
-          ai_indices: [{ id: 'another-one', is_default: true }],
+          ai_indices: [
+            { id: 'another-one', is_default: true },
+            { id: 'user-memories', is_default: true },
+          ],
         },
       ]);
       expect(result.body.warnings).toEqual([
@@ -197,8 +207,26 @@ describe('registerInternalAgentRoutes', () => {
       expect(mockGet).toHaveBeenCalledWith('chat-agent');
       expect(result.body.ai_indices).toEqual([
         { id: 'elastic', is_default: true },
+        { id: 'user-memories', is_default: true },
         { id: 'my-index', is_default: false },
       ]);
+    });
+
+    it('leaves out the built-in AI indices the agent switched off', async () => {
+      mockGet.mockResolvedValue({
+        id: 'chat-agent',
+        type: 'chat',
+        configuration: {
+          tools: [],
+          ai_indices: ['my-index'],
+          enable_elastic_ai_index: false,
+          enable_user_memory: false,
+        },
+      });
+
+      const result = await callById(true);
+
+      expect(result.body.ai_indices).toEqual([{ id: 'my-index', is_default: false }]);
     });
 
     it('returns not found and does not load the agent when the Context Engine is disabled', async () => {
@@ -214,7 +242,10 @@ describe('registerInternalAgentRoutes', () => {
 
       const result = await callById(true);
 
-      expect(result.body.ai_indices).toEqual([{ id: 'my-index', is_default: false }]);
+      expect(result.body.ai_indices).toEqual([
+        { id: 'user-memories', is_default: true },
+        { id: 'my-index', is_default: false },
+      ]);
       expect(result.body.warnings).toEqual([
         {
           message: 'boom',

@@ -55,6 +55,7 @@ export const forkContextForAgentRun = ({
   conversationId?: string;
   executionId?: string;
   origin?: ConversationOriginType;
+  aiIndices?: string[];
   parentContext: RunContext;
 }): RunContext => {
   return {

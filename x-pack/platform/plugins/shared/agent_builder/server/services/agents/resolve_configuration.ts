@@ -13,7 +13,11 @@ import type {
   AgentTypeDefinition,
   AgentTypeRegistry,
 } from '@kbn/agent-builder-server/agents';
-import { mergeAgentConfiguration } from '@kbn/agent-builder-server/agents';
+import {
+  applyBuiltinAiIndexSwitches,
+  applyConversationLearning,
+  mergeAgentConfiguration,
+} from '@kbn/agent-builder-server/agents';
 
 /**
  * Resolves an agent type's base configuration for the given context, folding it under the
@@ -71,7 +75,12 @@ export const createConfigurationResolver = ({
     ctx: AgentConfigContext;
   }): Promise<AgentConfiguration> => {
     const base = await resolveBaseConfiguration(agentType, ctx);
-    return mergeAgentConfiguration(base, configuration);
+    const merged = mergeAgentConfiguration(base, configuration);
+    const resolved = {
+      ...merged,
+      ai_indices: applyBuiltinAiIndexSwitches(merged.ai_indices ?? [], merged),
+    };
+    return { ...resolved, ...applyConversationLearning(resolved) };
   };
 
   // `resolveBase` is exposed alongside the merged result because callers that need to distinguish

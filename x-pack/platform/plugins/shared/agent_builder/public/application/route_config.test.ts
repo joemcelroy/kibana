@@ -129,6 +129,9 @@ describe('route_config', () => {
       expect(getPathWithSwitchedAgent('/agents/agent-a/plugins', next)).toBe(
         '/agents/other-agent/plugins'
       );
+      expect(getPathWithSwitchedAgent('/agents/agent-a/memory', next)).toBe(
+        '/agents/other-agent/memory'
+      );
     });
 
     it('preserves agent root', () => {
@@ -155,6 +158,17 @@ describe('route_config', () => {
       expect(
         getViewIdForPathname('/agents/elastic-ai-agent/tools', enabledRoutesWithExperimental)
       ).toBe(agentBuilderViewIds.agentTools);
+    });
+
+    it('returns the viewId for the memory page, from an agent or on its own', () => {
+      expect(
+        getViewIdForPathname('/agents/elastic-ai-agent/memory', enabledRoutesWithExperimental)
+      ).toBe(agentBuilderViewIds.agentMemory);
+      expect(getSidebarViewForRoute('/agents/elastic-ai-agent/memory')).toBe('conversation');
+      expect(getViewIdForPathname('/manage/memory', enabledRoutesWithExperimental)).toBe(
+        agentBuilderViewIds.manageMemory
+      );
+      expect(getSidebarViewForRoute('/manage/memory')).toBe('manage');
     });
 
     it('returns the viewId for conversation route', () => {

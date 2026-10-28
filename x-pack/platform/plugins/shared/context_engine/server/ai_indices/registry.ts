@@ -7,14 +7,21 @@
 
 import type { Logger } from '@kbn/logging';
 import type { AiIndexProperties } from '../../common/http_api/ai_indices';
+import type { ManagedDreamingConfig } from '../../common/dreaming';
 import type { AiIndexService } from './service';
 import { AiIndexConflictError } from './errors';
 
+export interface AiIndexRegistrationOptions {
+  /** Dreaming config owned by the plugin; users only turn it on and pick its schedule. */
+  dreaming?: ManagedDreamingConfig;
+}
+
 export class AiIndexRegistry {
   private readonly entries = new Map<string, AiIndexProperties>();
+  private readonly dreaming = new Map<string, ManagedDreamingConfig>();
   private frozen = false;
 
-  register(id: string, properties: AiIndexProperties): void {
+  register(id: string, properties: AiIndexProperties, options?: AiIndexRegistrationOptions): void {
     if (this.frozen) {
       throw new Error('registerAiIndex called after plugin setup');
     }
@@ -22,6 +29,9 @@ export class AiIndexRegistry {
       throw new Error(`AI index '${id}' is already registered`);
     }
     this.entries.set(id, properties);
+    if (options?.dreaming) {
+      this.dreaming.set(id, options.dreaming);
+    }
   }
 
   /** Marks setup complete; further `register()` calls are rejected. */
@@ -40,6 +50,10 @@ export class AiIndexRegistry {
 
   get(id: string): AiIndexProperties | undefined {
     return this.entries.get(id);
+  }
+
+  getDreamingConfig(id: string): ManagedDreamingConfig | undefined {
+    return this.dreaming.get(id);
   }
 
   /**

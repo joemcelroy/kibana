@@ -63,6 +63,29 @@ describe('conversation access control query', () => {
       });
     });
 
+    it("also matches what an API key's creator owns by their realm id", () => {
+      const filter = buildReadAccessFilter({
+        user: { id: 'profile-1', username: 'alice', realmId: 'realm:["file","file1","alice"]' },
+        agentIds: ['agent-1'],
+      });
+
+      expect(filter.bool.filter[0].bool?.should[1]).toEqual({
+        bool: {
+          should: [
+            { term: { user_id: 'profile-1' } },
+            { term: { user_id: 'realm:["file","file1","alice"]' } },
+            {
+              bool: {
+                must_not: { exists: { field: 'user_id' } },
+                filter: { term: { user_name: 'alice' } },
+              },
+            },
+          ],
+          minimum_should_match: 1,
+        },
+      });
+    });
+
     it('omits the shared clause entirely when the caller has no id', () => {
       expect(
         buildReadAccessFilter({ user: { username: user.username }, agentIds: ['agent-1'] })

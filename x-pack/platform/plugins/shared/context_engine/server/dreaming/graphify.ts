@@ -6,9 +6,9 @@
  */
 
 import type { ElasticsearchClient } from '@kbn/core/server';
-import type { AiIndexDreamingConfig, ShortTermMemory } from '../../common/dreaming';
+import type { AiIndexDreamingConfig, DreamingMemory } from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
-import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import type { DreamingMemoryReader } from './memory_reader';
 import {
   applyOperations,
   deleteKi,
@@ -18,18 +18,22 @@ import {
   type ApplyContext,
   type ApplyCounts,
 } from './apply';
+import { keepVerifiedPatterns, type VerifyEsql } from './access_patterns';
 import { changeSetSchema } from './change_set';
 import { DreamingTaskNotFoundError, InvalidChangeSetError } from './errors';
 import { memoryUri, ownerOf } from './ids';
 import {
+  SESSION_ATTRIBUTE,
   USER_ATTRIBUTE,
   citedMemoryIds,
   findKisDerivedFrom,
+  isSessionKi,
   isStale,
   loadOwnerKis,
+  loadSessionKis,
   type DreamedKi,
 } from './long_term';
-import { buildInput, buildSystemPrompt } from './prompt';
+import { buildInput, buildSystemPrompt, type PromptSession } from './prompt';
 import { resolveChangeSet, vocabularyOf, type DreamingOperation } from './resolve_change_set';
 import type { DreamingRunProgress, RunKey } from './run_progress';
 
@@ -47,9 +51,11 @@ export interface GraphifyParams extends RunKey {
   dryRun: boolean;
   /** The workflow user's client; every long-term read and write goes through it. */
   esClient: ElasticsearchClient;
-  shortTermMemory: ShortTermMemoryServiceApi;
+  memoryReader: DreamingMemoryReader;
   runProgress: DreamingRunProgress;
   getModel: () => Promise<DreamingModel>;
+  /** Checks access pattern examples as the workflow user, so they only cite data it can read. */
+  verifyEsql: VerifyEsql;
   abortSignal?: AbortSignal;
 }
 
@@ -57,12 +63,63 @@ export interface GraphifyResult extends ApplyCounts {
   task_id: string;
   status: 'applied' | 'unchanged' | 'dry_run';
   rejected: number;
+  /** Access patterns dropped because their example did not run. */
+  access_patterns_dropped?: number;
   /** Only for a dry run. */
   operations?: DreamingOperation[];
+  /** Only for a dry run: why each rejected item was rejected. */
+  rejections?: Array<{ item: string; reason: string }>;
 }
 
 const belongsTo = (ki: DreamedKi, userId: string | undefined): boolean =>
   ki.attributes?.[USER_ATTRIBUTE] === userId;
+
+const sessionOfKi = (ki: DreamedKi): string | undefined => {
+  const sessionId = ki.attributes?.[SESSION_ATTRIBUTE];
+  return typeof sessionId === 'string' ? sessionId : undefined;
+};
+
+/**
+ * The task's sessions, each with its current session document: the sessions of its new memories,
+ * and those of stale session documents it has to rewrite.
+ */
+const taskSessions = (
+  newMemories: readonly DreamingMemory[],
+  sessionKis: readonly DreamedKi[],
+  standing: readonly DreamedKi[]
+): Map<string, DreamedKi | undefined> => {
+  const sessions = new Map<string, DreamedKi | undefined>();
+  for (const { session_id: sessionId } of newMemories) {
+    sessions.set(
+      sessionId,
+      sessionKis.find((ki) => !isStale(ki) && sessionOfKi(ki) === sessionId)
+    );
+  }
+  for (const ki of standing) {
+    const sessionId = sessionOfKi(ki);
+    if (sessionId !== undefined) {
+      sessions.set(sessionId, ki);
+    }
+  }
+  return sessions;
+};
+
+const promptSessions = (
+  sessions: ReadonlyMap<string, DreamedKi | undefined>,
+  memories: readonly DreamingMemory[]
+): PromptSession[] =>
+  [...sessions].map(([sessionId, document]) => {
+    const recordedAt = memories
+      .filter(({ session_id: id }) => id === sessionId)
+      .map((memory) => memory.occurred_at ?? memory['@timestamp'])
+      .sort();
+    return {
+      sessionId,
+      firstRecordedAt: recordedAt[0] ?? '',
+      lastRecordedAt: recordedAt[recordedAt.length - 1] ?? '',
+      ...(document && { document }),
+    };
+  });
 
 /**
  * Settles stale KIs before the model sees them: drops references to forgotten memories, and
@@ -72,18 +129,18 @@ const settleStaleKis = async (
   context: ApplyContext,
   {
     staleKis,
-    shortTermMemory,
+    memoryReader,
     spaceId,
     dryRun,
   }: {
     staleKis: readonly DreamedKi[];
-    shortTermMemory: ShortTermMemoryServiceApi;
+    memoryReader: DreamingMemoryReader;
     spaceId: string;
     dryRun: boolean;
   }
-): Promise<{ standing: DreamedKi[]; sources: ShortTermMemory[]; deleted: number }> => {
+): Promise<{ standing: DreamedKi[]; sources: DreamingMemory[]; deleted: number }> => {
   const cited = [...new Set(staleKis.flatMap(citedMemoryIds))];
-  const sources = await shortTermMemory.getByIds(spaceId, cited);
+  const sources = await memoryReader.getByIds(spaceId, cited);
   const remaining = new Set(sources.map(({ id }) => id));
   const standing: DreamedKi[] = [];
   let deleted = 0;
@@ -126,9 +183,10 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     config,
     dryRun,
     esClient,
-    shortTermMemory,
+    memoryReader,
     runProgress,
     getModel,
+    verifyEsql,
     abortSignal,
   } = params;
   const key: RunKey = { spaceId, aiIndexId, executionId };
@@ -163,7 +221,7 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     return { task_id: taskId, status: 'applied', rejected: saved.progress.rejected, ...counts };
   }
 
-  const memories = await shortTermMemory.getByIds(spaceId, task.memory_ids);
+  const memories = await memoryReader.getByIds(spaceId, task.memory_ids);
   const alreadyDreamed = new Set(
     (await findKisDerivedFrom({ esClient, dest, memoryIds: task.memory_ids, abortSignal })).flatMap(
       citedMemoryIds
@@ -175,13 +233,30 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
   const ownerKis = (await loadOwnerKis({ esClient, dest, owner, abortSignal })).filter((ki) =>
     belongsTo(ki, task.user_id)
   );
+  const sessionKis = config.sessions
+    ? (
+        await loadSessionKis({
+          esClient,
+          dest,
+          owner,
+          sessionIds: [...new Set(newMemories.map(({ session_id: sessionId }) => sessionId))],
+          abortSignal,
+        })
+      ).filter((ki) => belongsTo(ki, task.user_id))
+    : [];
   const settled = await settleStaleKis(context, {
-    staleKis: ownerKis.filter(isStale),
-    shortTermMemory,
+    staleKis: [...ownerKis, ...sessionKis].filter(isStale),
+    memoryReader,
     spaceId,
     dryRun,
   });
-  const existing = [...ownerKis.filter((ki) => !isStale(ki)), ...settled.standing];
+  const existing = [
+    ...ownerKis.filter((ki) => !isStale(ki)),
+    ...settled.standing.filter((ki) => !isSessionKi(ki)),
+  ];
+  const sessions = config.sessions
+    ? taskSessions(newMemories, sessionKis, settled.standing.filter(isSessionKi))
+    : undefined;
 
   const result = (counts: ApplyCounts, rejected: number, status: GraphifyResult['status']) => ({
     task_id: taskId,
@@ -205,7 +280,14 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
   const model = await getModel();
   const raw = await model({
     system: buildSystemPrompt(config),
-    input: buildInput({ memories: newMemories, staleSources: settled.sources, existing }),
+    input: buildInput({
+      memories: newMemories,
+      staleSources: settled.sources,
+      existing,
+      ...(sessions && {
+        sessions: promptSessions(sessions, [...newMemories, ...settled.sources]),
+      }),
+    }),
     abortSignal,
   });
   const parsed = changeSetSchema.safeParse(raw);
@@ -216,7 +298,7 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
   const sessionByMemoryId = new Map(
     [...memories, ...settled.sources].map(({ id, session_id: sessionId }) => [id, sessionId])
   );
-  const { operations, rejected } = resolveChangeSet(parsed.data, {
+  const resolved = resolveChangeSet(parsed.data, {
     executionId,
     taskId,
     owner,
@@ -224,10 +306,18 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     memoryIds: new Set(newMemories.map(({ id }) => id)),
     sessionByMemoryId,
     existing: new Map(existing.map((ki) => [ki.id, ki])),
+    ...(sessions && { sessions }),
   });
+  const { rejected } = resolved;
+  const { operations, dropped } = await keepVerifiedPatterns(resolved.operations, verifyEsql);
 
   if (dryRun) {
-    return { ...result(emptyCounts(), rejected.length, 'dry_run'), operations };
+    return {
+      ...result(emptyCounts(), rejected.length, 'dry_run'),
+      access_patterns_dropped: dropped,
+      operations,
+      rejections: rejected,
+    };
   }
 
   await runProgress.saveTask(key, taskId, 'planned', { operations, rejected: rejected.length });
@@ -237,5 +327,5 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     rejected: rejected.length,
     counts,
   });
-  return result(counts, rejected.length, 'applied');
+  return { ...result(counts, rejected.length, 'applied'), access_patterns_dropped: dropped };
 };

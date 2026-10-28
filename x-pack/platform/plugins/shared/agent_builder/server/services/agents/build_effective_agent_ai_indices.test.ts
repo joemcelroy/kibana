@@ -16,6 +16,7 @@ describe('buildEffectiveAgentAiIndices', () => {
       })
     ).toEqual([
       { id: 'elastic', is_default: true },
+      { id: 'user-memories', is_default: true },
       { id: 'sales', is_default: false },
     ]);
   });
@@ -28,7 +29,18 @@ describe('buildEffectiveAgentAiIndices', () => {
       })
     ).toEqual([
       { id: 'elastic', is_default: true },
+      { id: 'user-memories', is_default: true },
       { id: 'sales', is_default: false },
     ]);
+  });
+
+  it('leaves out built-in AI indices the agent switched off, even when assigned', () => {
+    expect(
+      buildEffectiveAgentAiIndices({
+        inherited: ['elastic'],
+        assigned: ['user-memories', 'sales'],
+        switches: { enable_elastic_ai_index: false, enable_user_memory: false },
+      })
+    ).toEqual([{ id: 'sales', is_default: false }]);
   });
 });

@@ -201,7 +201,7 @@ describe('describeAiIndex', () => {
       [
         'For cross-session recall, search granular facts with hybrid retrieval:',
         'FROM ai-index-idx-support* METADATA _id, _index, _score',
-        '| WHERE type == "memory.session_fact" OR type LIKE "fact.*"',
+        '| WHERE type == "memory.session" OR type == "memory.session_fact" OR type LIKE "fact.*"',
         '| INLINE STATS latest_at = MAX(@timestamp) BY id',
         '| WHERE @timestamp == latest_at',
         '  AND (governance.lifecycle.status IS NULL OR governance.lifecycle.status == "active")',

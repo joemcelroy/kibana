@@ -433,6 +433,8 @@ export class AgentBuilderPlugin
     return {
       agents: {
         getRegistry: ({ request }) => agents.getRegistry({ request }),
+        resolveConfiguration: ({ agent, request }) =>
+          agents.resolveAgentConfiguration({ agent, request }),
         ensure: agents.ensure,
         runAgent: runner.runAgent.bind(runner),
       },

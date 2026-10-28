@@ -72,7 +72,7 @@ need per-query filtering.
 ### Space scoping
 
 A KI may be restricted to Kibana spaces. Run every AI-index query below through
-`platform.context_engine.query_ai_indices`, which returns only the KIs visible from the current
+`platform.context_engine.recall`, passing the ES|QL as its `query`, which returns only the KIs visible from the current
 space, and never through `platform.core.execute_esql`, which does not. Never write a space
 condition in ES|QL: it can silently match nothing.
 
@@ -87,7 +87,7 @@ below opens with the two lifecycle filters, so the query reads as what it return
 | WHERE expires_at IS NULL OR expires_at > NOW()
 ```
 
-`platform.context_engine.query_ai_indices` adds these two filters and `DROP governance.*` to any
+`platform.context_engine.recall` adds these two filters and `DROP governance.*` to any
 query that omits them, and on a data stream keeps only the newest revision per `id`. A top-level `WHERE`
 command on a lifecycle field switches off its filter only: `WHERE governance.lifecycle.status == "deleted"` returns
 tombstones and `WHERE expires_at < NOW()` returns expired KIs. Any other top-level `WHERE` on
@@ -247,7 +247,7 @@ Combine `type` and `tags` filters in the same `WHERE` as needed, for example
    tag counts, and example queries. Across several targets, run `STATS ki_count = COUNT(*) BY type`
    instead. Sample a few KIs (`WHERE type == "..." | LIMIT 2`) only when type names are ambiguous.
    Remember that this doesn't come for free, so only proceed with this if needed.
-3. **Query** — use FORK+FUSE hybrid search through `platform.context_engine.query_ai_indices`.
+3. **Query** — use FORK+FUSE hybrid search through `platform.context_engine.recall`.
 4. **Return** — the `KEEP` clause already limits results to `title`, `description`, `content`,
    `type` and `tags`. Seeing `tags` on the results is often enough to narrow a follow-up query
    without a separate aggregation.

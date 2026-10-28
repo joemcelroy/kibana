@@ -1,0 +1,32 @@
+version: '1'
+name: 'Context Engine Round Capture'
+description: 'Saves the transcript of a completed Agent Builder round in Context Engine, so the agent''s per-user AI indices learn from the conversation when they dream.'
+# Agent Builder runs this after every completed round of an agent that has an AI index or remembers
+# users, as the user who had the round.
+enabled: true
+tags:
+  - context-engine
+  - memory
+triggers:
+  - type: manual
+    inputs:
+      properties:
+        conversation_id:
+          type: string
+          description: 'Conversation of the completed round.'
+        round_id:
+          type: string
+          description: 'Id of the completed round.'
+        agent_id:
+          type: string
+          description: 'Agent that had the round.'
+      # tool_results is left out on purpose: Agent Builder only passes it to workflows that
+      # declare it, and a run keeps its inputs. The step re-reads the round instead.
+steps:
+  - name: capture_round
+    type: context-engine.captureRound
+    timeout: 60s
+    with:
+      conversation_id: '{{ inputs.conversation_id }}'
+      round_id: '{{ inputs.round_id }}'
+      agent_id: '{{ inputs.agent_id }}'

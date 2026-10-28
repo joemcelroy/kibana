@@ -7,13 +7,14 @@
 
 import type { estypes } from '@elastic/elasticsearch';
 import type { ElasticsearchClient } from '@kbn/core/server';
-import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX } from '../../common/dreaming';
+import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX, SESSION_KI_TYPE } from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import type { KiReferenceRelation } from '../../common/step_types/ki';
 import { isKiDeleted, type StoredKi } from '../ai_indices/ki_revision';
-import { memoryIdFromUri, memoryUri, ownerIdPrefix } from './ids';
+import { memoryIdFromUri, memoryUri, ownerIdPrefix, sessionKiId } from './ids';
 
 export const USER_ATTRIBUTE = 'memory.user_id';
+export const SESSION_ATTRIBUTE = 'memory.session_id';
 export const ENTITY_ATTRIBUTE_PREFIX = 'entity.';
 
 /** Most long-term KIs of one owner a task shows the model. */
@@ -44,6 +45,14 @@ const LENIENT_INDEX_OPTIONS = { ignore_unavailable: true, allow_no_indices: true
 const dreamedTypeFilter: estypes.QueryDslQueryContainer = {
   bool: {
     should: [{ prefix: { type: ENTITY_TYPE_PREFIX } }, { prefix: { type: FACT_TYPE_PREFIX } }],
+    minimum_should_match: 1,
+  },
+};
+
+/** Everything dreaming writes, session documents included: what forget has to reach. */
+const writtenByDreamingFilter: estypes.QueryDslQueryContainer = {
+  bool: {
+    should: [dreamedTypeFilter, { term: { type: SESSION_KI_TYPE } }],
     minimum_should_match: 1,
   },
 };
@@ -110,7 +119,55 @@ export const loadOwnerKis = ({
     },
   });
 
-/** Current long-term KIs that cite any of `memoryIds` as a source. */
+/**
+ * The owner's session documents a task needs: the ones for its sessions, and any marked stale by
+ * a forget so the task can rewrite or delete them. A stale match can be an older revision, so
+ * stale ones are kept only when their current revision is stale.
+ */
+export const loadSessionKis = async ({
+  esClient,
+  dest,
+  owner,
+  sessionIds,
+  abortSignal,
+}: {
+  esClient: ElasticsearchClient;
+  dest: AiIndexDest;
+  owner: string;
+  sessionIds: readonly string[];
+  abortSignal?: AbortSignal;
+}): Promise<DreamedKi[]> => {
+  const ownerSessions: estypes.QueryDslQueryContainer[] = [
+    { prefix: { id: ownerIdPrefix(owner) } },
+    { term: { type: SESSION_KI_TYPE } },
+  ];
+  const staleCandidates = await searchCurrentKis({
+    esClient,
+    dest,
+    size: MAX_OWNER_KIS,
+    abortSignal,
+    query: {
+      bool: { filter: [...ownerSessions, { term: { 'governance.lifecycle.status': 'stale' } }] },
+    },
+  });
+  const taskIds = new Set(sessionIds.map((sessionId) => sessionKiId(owner, sessionId)));
+  const ids = [...new Set([...taskIds, ...staleCandidates.map(({ id }) => id)])];
+  if (ids.length === 0) {
+    return [];
+  }
+  const current = await searchCurrentKis({
+    esClient,
+    dest,
+    size: ids.length,
+    abortSignal,
+    query: { bool: { filter: [...ownerSessions, { terms: { id: ids } }] } },
+  });
+  return current.filter((ki) => taskIds.has(ki.id) || isStale(ki));
+};
+
+export const isSessionKi = (ki: DreamedKi): boolean => ki.type === SESSION_KI_TYPE;
+
+/** Current long-term KIs, session documents included, that cite any of `memoryIds` as a source. */
 export const findKisDerivedFrom = ({
   esClient,
   dest,
@@ -132,7 +189,10 @@ export const findKisDerivedFrom = ({
     abortSignal,
     query: {
       bool: {
-        filter: [{ terms: { 'references.uri': memoryIds.map(memoryUri) } }, dreamedTypeFilter],
+        filter: [
+          { terms: { 'references.uri': memoryIds.map(memoryUri) } },
+          writtenByDreamingFilter,
+        ],
       },
     },
   });

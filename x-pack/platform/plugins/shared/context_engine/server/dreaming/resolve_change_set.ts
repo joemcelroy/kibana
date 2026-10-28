@@ -12,8 +12,9 @@ import {
   type AiIndexDreamingConfig,
   type DreamingRelationshipType,
 } from '../../common/dreaming';
+import { baseContent, type AccessPattern } from './access_patterns';
 import type { DreamingChangeSet } from './change_set';
-import { entityId, factId } from './ids';
+import { entityId, factId, sessionKiId } from './ids';
 import { citedMemoryIds, isStale, type DreamedKi } from './long_term';
 
 export const DREAMING_TYPE_PATTERN = /^[a-z0-9_]+$/;
@@ -54,6 +55,11 @@ export interface GraphifyTaskContext {
   sessionByMemoryId: ReadonlyMap<string, string>;
   /** The owner's current entities and facts by id. */
   existing: ReadonlyMap<string, DreamedKi>;
+  /**
+   * When the config keeps session documents: the task's sessions, each with its current session
+   * document if it has one. Absent rejects every session entry.
+   */
+  sessions?: ReadonlyMap<string, DreamedKi | undefined>;
 }
 
 export interface UpsertEntityOperation {
@@ -62,7 +68,10 @@ export interface UpsertEntityOperation {
   type: string;
   name: string;
   description?: string;
+  content?: string;
   attributes: Record<string, string>;
+  /** Replaces the entity's access patterns. `undefined` keeps them. */
+  accessPatterns?: AccessPattern[];
   sourceMemoryIds: string[];
   sessionIds: string[];
 }
@@ -75,8 +84,19 @@ export interface UpsertFactOperation {
   content: string;
   /** Replaces the fact's `about` references. `undefined` keeps them. */
   about?: string[];
+  /** Replaces the fact's access patterns. `undefined` keeps them. */
+  accessPatterns?: AccessPattern[];
   sourceMemoryIds: string[];
   sessionIds: string[];
+}
+
+export interface UpsertSessionOperation {
+  op: 'upsert_session';
+  id: string;
+  sessionId: string;
+  title: string;
+  content: string;
+  sourceMemoryIds: string[];
 }
 
 export interface DeleteOperation {
@@ -101,6 +121,7 @@ export interface ClearStaleOperation {
 export type DreamingOperation =
   | UpsertEntityOperation
   | UpsertFactOperation
+  | UpsertSessionOperation
   | DeleteOperation
   | RelationshipOperation
   | ClearStaleOperation;
@@ -135,8 +156,16 @@ export const resolveChangeSet = (
   changeSet: DreamingChangeSet,
   context: GraphifyTaskContext
 ): ResolvedChangeSet => {
-  const { executionId, taskId, owner, vocabulary, memoryIds, sessionByMemoryId, existing } =
-    context;
+  const {
+    executionId,
+    taskId,
+    owner,
+    vocabulary,
+    memoryIds,
+    sessionByMemoryId,
+    existing,
+    sessions,
+  } = context;
   const operations: DreamingOperation[] = [];
   const rejected: ResolvedChangeSet['rejected'] = [];
   const touched = new Set<string>();
@@ -202,9 +231,8 @@ export const resolveChangeSet = (
         touched.add(entity.ref);
         return;
       }
-      if (!current && !entity.ref.startsWith(NEW_REF_PREFIX)) {
-        reject(`'${entity.ref}' is neither an existing entity nor a new key`);
-      }
+      // Any other ref is a new key: models often label new entities in their own way, and an
+      // entity's id comes from its type and name, so a new key can never duplicate one.
       const type = entity.type ?? current?.type.slice(ENTITY_TYPE_PREFIX.length);
       const name = entity.name ?? current?.title;
       if (!type || !name) {
@@ -232,7 +260,9 @@ export const resolveChangeSet = (
         type,
         name,
         ...(entity.description !== undefined && { description: entity.description }),
+        ...(entity.content !== undefined && { content: entity.content }),
         attributes,
+        ...(entity.access_patterns && { accessPatterns: entity.access_patterns }),
         sourceMemoryIds,
         sessionIds: sessionsOf(sourceMemoryIds),
       });
@@ -263,7 +293,7 @@ export const resolveChangeSet = (
       }
       const type = fact.type ?? current?.type.slice(FACT_TYPE_PREFIX.length);
       const title = fact.title ?? current?.title;
-      const content = fact.content ?? current?.content;
+      const content = fact.content ?? baseContent(current?.content);
       if (!type || !title || !content) {
         reject('a fact needs a type, a title, and content');
       }
@@ -281,6 +311,7 @@ export const resolveChangeSet = (
         title,
         content,
         ...(about && { about }),
+        ...(fact.access_patterns && { accessPatterns: fact.access_patterns }),
         sourceMemoryIds,
         sessionIds: sessionsOf(sourceMemoryIds),
       });
@@ -328,9 +359,47 @@ export const resolveChangeSet = (
     );
   }
 
-  for (const [id, ki] of existing) {
-    if (isStale(ki) && !touched.has(id)) {
-      operations.push({ op: 'clear_stale', id });
+  for (const session of changeSet.sessions) {
+    attempt(`session ${session.session_id}`, () => {
+      if (!sessions) {
+        reject('this AI index does not keep session documents');
+      }
+      if (!sessions.has(session.session_id)) {
+        reject(`'${session.session_id}' is not a session of this task`);
+      }
+      const current = sessions.get(session.session_id);
+      const title = session.title ?? current?.title;
+      const content = session.summary ?? current?.content;
+      if (!title || !content) {
+        reject('a session document needs a title and a summary');
+      }
+      // A session document stands for the whole session, so it cites every memory of it.
+      const sourceMemoryIds = [
+        ...new Set([
+          ...(current ? citedMemoryIds(current) : []),
+          ...[...memoryIds].filter((id) => sessionByMemoryId.get(id) === session.session_id),
+        ]),
+      ];
+      if (sourceMemoryIds.length === 0) {
+        reject('the session has no memories to cite');
+      }
+      const id = current?.id ?? sessionKiId(owner, session.session_id);
+      touched.add(id);
+      operations.push({
+        op: 'upsert_session',
+        id,
+        sessionId: session.session_id,
+        title,
+        content,
+        sourceMemoryIds,
+      });
+    });
+  }
+
+  const sessionDocuments = [...(sessions?.values() ?? [])].flatMap((ki) => (ki ? [ki] : []));
+  for (const ki of [...existing.values(), ...sessionDocuments]) {
+    if (isStale(ki) && !touched.has(ki.id)) {
+      operations.push({ op: 'clear_stale', id: ki.id });
     }
   }
 

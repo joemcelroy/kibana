@@ -12,7 +12,7 @@ import type { BuiltinToolDefinition } from '@kbn/agent-builder-server';
 import { MAX_SHORT_TERM_MEMORY_ID_LENGTH } from '@kbn/context-engine-plugin/common/dreaming';
 import type { ForgetMemoryResult } from '@kbn/context-engine-plugin/server/dreaming/forget';
 import type { ShortTermMemoryServiceApi } from '@kbn/context-engine-plugin/server/short_term_memory/service';
-import type { CoreStart } from '@kbn/core/server';
+import type { CoreStart, KibanaRequest } from '@kbn/core/server';
 import type { SecurityPluginStart } from '@kbn/security-plugin/server';
 import { z } from '@kbn/zod/v4';
 import dedent from 'dedent';
@@ -35,7 +35,11 @@ export const createForgetTool = ({
   getSecurityStart,
 }: {
   getShortTermMemory: () => Promise<ShortTermMemoryServiceApi>;
-  forgetMemory: (spaceId: string, memoryId: string) => Promise<ForgetMemoryResult>;
+  forgetMemory: (
+    spaceId: string,
+    memoryId: string,
+    request: KibanaRequest
+  ) => Promise<ForgetMemoryResult>;
   getCoreStart: () => Promise<CoreStart>;
   getSecurityStart: () => Promise<SecurityPluginStart | undefined>;
 }): BuiltinToolDefinition<typeof forgetSchema> => ({
@@ -76,7 +80,9 @@ export const createForgetTool = ({
         }
       }
 
-      const { forgotten } = memory ? await forgetMemory(spaceId, id) : { forgotten: false };
+      const { forgotten } = memory
+        ? await forgetMemory(spaceId, id, request)
+        : { forgotten: false };
       return {
         results: [
           {

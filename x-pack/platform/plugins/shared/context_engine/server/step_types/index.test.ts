@@ -10,7 +10,7 @@ import type { AiIndexService } from '../ai_indices/service';
 import type { ImprovementsServiceApi } from '../improvements/service';
 import type { DreamingRunProgress } from '../dreaming/run_progress';
 import type { DreamingService } from '../dreaming/service';
-import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import type { DreamingMemoryReader } from '../dreaming/memory_reader';
 import { registerStepDefinitions } from '.';
 import { mockKiStepTelemetry } from './test_utils';
 
@@ -41,7 +41,7 @@ describe('registerStepDefinitions', () => {
       dreaming: {
         getAiIndexService: () => ({} as AiIndexService),
         getDreamingService: () => ({} as DreamingService),
-        getShortTermMemory: () => ({} as ShortTermMemoryServiceApi),
+        getMemoryReader: () => ({} as DreamingMemoryReader),
         getRunProgress: () => ({} as DreamingRunProgress),
         getDreamingModel: jest.fn(),
         isContextEngineEnabled: async () => true,

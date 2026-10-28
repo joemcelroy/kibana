@@ -5,12 +5,19 @@
  * 2.0.
  */
 
+import { agentBuilderUserMemoriesAiIndexId } from '@kbn/agent-builder-common';
 import type { AiIndexType } from './http_api/ai_indices';
 
 export const PUBLIC_API_PATH = '/api/context_engine';
 export const INTERNAL_API_PATH = '/internal/context_engine';
 
 export const AI_INDEX_PATH = `${PUBLIC_API_PATH}/ai_index`;
+/** Remembers something in short-term memory. */
+export const REMEMBER_PATH = `${PUBLIC_API_PATH}/_remember`;
+/** Looks something up in AI indices or short-term memory. */
+export const RECALL_PATH = `${PUBLIC_API_PATH}/_recall`;
+/** Saves the transcript of one of the caller's conversation rounds for dreaming. */
+export const SAVE_TRANSCRIPT_PATH = `${PUBLIC_API_PATH}/_save_transcript`;
 export const AI_INDEX_BY_ID_PATH = `${AI_INDEX_PATH}/{aiIndexId}`;
 /** Id-less; ids cannot start with `_` (`AI_INDEX_ID_PATTERN`), so this never collides with `{aiIndexId}`. */
 export const AI_INDEX_QUERY_PATH = `${AI_INDEX_PATH}/_query`;
@@ -21,6 +28,12 @@ export const AI_INDEX_DREAMING_PATH = `${AI_INDEX_BY_ID_PATH}/_dreaming`;
 export const AI_INDEX_DREAMING_STATE_PATH = `${AI_INDEX_DREAMING_PATH}/_state`;
 export const AI_INDEX_DREAM_PATH = `${AI_INDEX_BY_ID_PATH}/_dream`;
 export const AI_INDEX_SHORT_TERM_MEMORY_PULL_PATH = `${INTERNAL_API_PATH}/ai_index/{aiIndexId}/short_term_memory/_pull`;
+/** The caller's own long-term memory in the AI indices they name. */
+export const OWN_MEMORY_LIST_PATH = `${INTERNAL_API_PATH}/memory/_mine`;
+/** Forgets the caller's recorded conversation rounds in the space. */
+export const OWN_ROUNDS_FORGET_PATH = `${INTERNAL_API_PATH}/memory/_mine/rounds/_forget`;
+/** The caller's own memory settings in the space. */
+export const OWN_MEMORY_SETTINGS_PATH = `${INTERNAL_API_PATH}/memory/_mine/settings`;
 export const AI_INDEX_KI_LIST_PATH = `${INTERNAL_API_PATH}/ai_index/{aiIndexId}/kis`;
 export const AI_INDEX_KI_BY_ID_PATH = `${AI_INDEX_KI_LIST_PATH}/{kiId}`;
 export const AI_INDEX_KI_RESTORE_PATH = `${AI_INDEX_KI_BY_ID_PATH}/_restore`;
@@ -160,3 +173,10 @@ export const AGENT_BUILDER_TRACES_INDEX_PREFIX = 'traces-agent_builder.otel-';
 /** The Agent Builder OTel traces index name for a given Kibana space. */
 export const buildAgentBuilderTracesIndexName = (spaceId: string): string =>
   `${AGENT_BUILDER_TRACES_INDEX_PREFIX}${spaceId}`;
+
+/**
+ * The AI index Context Engine registers in every space for what agents learn about each user.
+ * Agent Builder gives it to every agent unless the agent switches user memory off.
+ */
+export const USER_MEMORIES_AI_INDEX_ID = agentBuilderUserMemoriesAiIndexId;
+export const USER_MEMORIES_AI_INDEX_DEST = 'ai-index-idx-user-memories';

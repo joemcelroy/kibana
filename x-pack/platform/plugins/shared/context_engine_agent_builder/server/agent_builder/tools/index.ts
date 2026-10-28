@@ -15,9 +15,9 @@ import { createInstallAutomationTemplateTool } from './install_automation_templa
 import { createRunAutomationTool } from './run_automation/tool';
 import { createListAiIndicesTool } from './list_ai_indices/tool';
 import { createDescribeAiIndexTool } from './describe_ai_index/tool';
-import { createQueryAiIndicesTool } from './query_ai_indices/tool';
 import { createForgetTool } from './forget/tool';
 import { createRememberTool } from './remember/tool';
+import { createRecallTool } from './recall/tool';
 
 type WorkflowsManagementApi = WorkflowsServerPluginSetup['management'];
 
@@ -63,21 +63,15 @@ export const registerAgentBuilderTools = ({
   const aiIndexToolDeps = { getContextEngineStart, getSecurityStart };
   agentBuilder.tools.register(createListAiIndicesTool(aiIndexToolDeps));
   agentBuilder.tools.register(createDescribeAiIndexTool(aiIndexToolDeps));
-  agentBuilder.tools.register(createQueryAiIndicesTool(aiIndexToolDeps));
+  agentBuilder.tools.register(createRecallTool({ getContextEngineStart }));
   const getShortTermMemory = async () =>
     (await getContextEngineStart()).getShortTermMemoryService();
-  agentBuilder.tools.register(
-    createRememberTool({
-      getShortTermMemory,
-      getCoreStart,
-      getSecurityStart,
-    })
-  );
+  agentBuilder.tools.register(createRememberTool({ getContextEngineStart, getCoreStart }));
   agentBuilder.tools.register(
     createForgetTool({
       getShortTermMemory,
-      forgetMemory: async (spaceId, memoryId) =>
-        (await getContextEngineStart()).forgetMemory(spaceId, memoryId),
+      forgetMemory: async (spaceId, memoryId, request) =>
+        (await getContextEngineStart()).forgetMemory(spaceId, memoryId, request),
       getCoreStart,
       getSecurityStart,
     })

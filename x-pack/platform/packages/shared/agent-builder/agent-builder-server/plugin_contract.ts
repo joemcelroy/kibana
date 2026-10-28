@@ -7,7 +7,12 @@
 
 import type { ZodObject } from '@kbn/zod/v4';
 import type { KibanaRequest } from '@kbn/core-http-server';
-import type { AgentCreateRequest, ConversationTemplate } from '@kbn/agent-builder-common';
+import type {
+  AgentConfiguration,
+  AgentCreateRequest,
+  AgentDefinition,
+  ConversationTemplate,
+} from '@kbn/agent-builder-common';
 import type { ConversationPublicClient } from './conversations';
 import type { CallbackConversationResolver, CallbackTransportDefinition } from './callbacks';
 import type { StaticToolRegistration, ToolRegistry } from './tools';
@@ -159,6 +164,14 @@ export interface AgentsStart {
    * Return an agent registry scoped to the current user and context.
    */
   getRegistry: (opts: { request: KibanaRequest }) => Promise<AgentRegistry>;
+  /**
+   * The configuration an agent runs with: its type's base merged with its own configuration,
+   * with the built-in AI indices and post-execution workflows its switches add.
+   */
+  resolveConfiguration: (opts: {
+    agent: Pick<AgentDefinition, 'type' | 'configuration'>;
+    request: KibanaRequest;
+  }) => Promise<AgentConfiguration>;
   /**
    * Ensure a system-owned persisted agent exists in a space without overwriting later edits.
    * Intended for code-owned startup installation; does not require a user request.

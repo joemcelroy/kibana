@@ -1,0 +1,35 @@
+{
+  "name": "context-engine",
+  "version": "0.1.0",
+  "description": "Elastic Context Engine memory for Claude Code: recall and remember through AI indices, and save each round's transcript for dreaming.",
+  "author": { "name": "Elastic" },
+  "license": "Elastic-2.0",
+  "keywords": ["elastic", "kibana", "context-engine", "memory"],
+  "userConfig": {
+    "kibana_url": {
+      "type": "string",
+      "title": "Kibana URL",
+      "description": "Base URL of Kibana, such as https://my-deployment.kb.us-east-1.aws.elastic.cloud",
+      "required": true
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API key",
+      "description": "An Elasticsearch API key (the encoded form) for the user whose memory this is.",
+      "required": true,
+      "sensitive": true
+    },
+    "space_id": {
+      "type": "string",
+      "title": "Space",
+      "description": "Kibana space id. Leave empty for the default space.",
+      "default": ""
+    },
+    "ai_index_ids": {
+      "type": "string",
+      "title": "AI indices",
+      "description": "Comma-separated AI index ids to use, like an agent's AI index list. Leave empty for every AI index you can read.",
+      "default": ""
+    }
+  }
+}

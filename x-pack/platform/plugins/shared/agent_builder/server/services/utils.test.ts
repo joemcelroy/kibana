@@ -486,6 +486,86 @@ describe('getUserFromRequest', () => {
     });
   });
 
+  describe("an API key's creator realm", () => {
+    const apiKeyId = 'workflow-api-key-id';
+
+    const createWorkflowRequest = () =>
+      httpServerMock.createFakeKibanaRequest({
+        headers: {
+          authorization: `ApiKey ${Buffer.from(`${apiKeyId}:secret`).toString('base64')}`,
+        },
+      });
+
+    beforeEach(() => {
+      security.authc.getCurrentUser.mockReturnValue({ username: 'alice' } as any);
+    });
+
+    it('adds the realm id their requests without a profile are known by', async () => {
+      esClient.security.getApiKey.mockResolvedValue({
+        api_keys: [
+          {
+            id: apiKeyId,
+            profile_uid: 'alice-profile',
+            username: 'alice',
+            realm: 'default_file',
+            realm_type: 'file',
+          },
+        ],
+      } as any);
+
+      const result = await getUserFromRequest({
+        request: createWorkflowRequest(),
+        security,
+        esClient,
+      });
+
+      expect(result).toEqual({
+        id: 'alice-profile',
+        username: 'alice',
+        isAdmin: false,
+        type: 'user',
+        realmId: 'realm:["file","default_file","alice"]',
+      });
+      expect(esClient.security.getApiKey).toHaveBeenCalledTimes(1);
+    });
+
+    it('adds it for a creator without a profile, whose id is otherwise unknown', async () => {
+      esClient.security.getApiKey.mockResolvedValue({
+        api_keys: [{ id: apiKeyId, username: 'alice', realm: 'default_file', realm_type: 'file' }],
+      } as any);
+
+      const result = await getUserFromRequest({
+        request: createWorkflowRequest(),
+        security,
+        esClient,
+      });
+
+      expect(result).toEqual({
+        id: undefined,
+        username: 'alice',
+        isAdmin: false,
+        type: 'user',
+        realmId: 'realm:["file","default_file","alice"]',
+      });
+    });
+
+    it('is not looked up for a request whose user has a profile', async () => {
+      security.authc.getCurrentUser.mockReturnValue({
+        username: 'alice',
+        profile_uid: 'alice-profile',
+      } as any);
+
+      const result = await getUserFromRequest({
+        request: createWorkflowRequest(),
+        security,
+        esClient,
+      });
+
+      expect(result).not.toHaveProperty('realmId');
+      expect(esClient.security.getApiKey).not.toHaveBeenCalled();
+    });
+  });
+
   describe('un-enriched fake requests authenticated with an API key', () => {
     const apiKeyId = 'task-api-key-id';
 

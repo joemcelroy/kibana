@@ -25,7 +25,7 @@ on it inherits the error, and a reviewer who catches one stops trusting the rest
 automations write to the same index, attribute an indicator to one by its
 `governance.provenance.created_by.uri`, which the steps stamp as `workflow://<workflow id>`, and
 confirm against the definition that writes to that destination and id pattern. Name that field in
-`KEEP`: `platform.context_engine.query_ai_indices` drops `governance` from any query that does not.
+`KEEP`: `platform.context_engine.recall` drops `governance` from any query that does not.
 If that does not settle it, say attribution was not established rather than guessing.
 
 The syntax these automations need — Liquid templating, `on-failure` handling, `if` conditions — is
@@ -129,7 +129,7 @@ it belongs to the cumulative strategy that reads before it merges — it is not 
 **`context-engine.deleteKi`** takes `ai_index_id` and `ki_id` and outputs `id`.
 On an index `deleteKi` removes the document; on a data stream it appends a revision with
 `governance.lifecycle.status: deleted`, so the earlier revisions stay in the backing store and
-`platform.context_engine.query_ai_indices` hides the indicator. It fails when the indicator does
+`platform.context_engine.recall` hides the indicator. It fails when the indicator does
 not exist. This is what pilot cleanup runs.
 
 **Verification rides on `createKi`.** Its `verifiers` list is non-empty and duplicate-free, and the
@@ -591,7 +591,7 @@ returns step outputs and the failure message when a step throws. A custom workfl
 
 **Read what it wrote, not whether it ran.** A workflow completes cleanly and still emits indicators
 with empty `content`, absent `attributes`, or titles too alike to tell apart under retrieval. Query
-the tag back with `platform.context_engine.query_ai_indices`, which applies space scoping
+the tag back with `platform.context_engine.recall`, passing the ES|QL as its `query`, which applies space scoping
 server-side (never read an AI Index with `platform.core.execute_esql`):
 
 ```esql
@@ -622,7 +622,7 @@ time fails the same way and costs an attempt.
 
 **Clean up before you return.** The pilot wrote into the user's real index, so the tagged indicators
 are yours to remove and cleanup is not optional — a skipped one leaves junk that nobody else will
-know to look for. Read the ids first with `platform.context_engine.query_ai_indices`, which
+know to look for. Read the ids first with `platform.context_engine.recall`, which
 applies the space filter, grouping by `id` so a KI with several revisions is deleted once:
 
 ```esql
@@ -638,7 +638,7 @@ the ids inside the cleanup workflow with an `elasticsearch.esql.query` step: it 
 store directly and skips the space filter the tool applies. The prefix is what makes this safe:
 every `id` under the tag is a pilot write, so nothing the user owned is touched.
 
-Then confirm, with `platform.context_engine.query_ai_indices` again:
+Then confirm, with `platform.context_engine.recall` again:
 
 ```esql
 FROM <destination>

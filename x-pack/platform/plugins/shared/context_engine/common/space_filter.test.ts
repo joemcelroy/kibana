@@ -5,7 +5,11 @@
  * 2.0.
  */
 
-import { AI_INDEX_PRIVILEGES_PATH, buildAiIndexSpaceFilter } from './space_filter';
+import {
+  AI_INDEX_PRIVILEGES_PATH,
+  buildAiIndexSpaceFilter,
+  buildAiIndexUserFilter,
+} from './space_filter';
 
 describe('buildAiIndexSpaceFilter', () => {
   it('matches documents scoped to the space or to the global wildcard', () => {
@@ -42,5 +46,40 @@ describe('buildAiIndexSpaceFilter', () => {
         minimum_should_match: 1,
       },
     });
+  });
+});
+
+describe('buildAiIndexUserFilter', () => {
+  const dests = [
+    { type: 'index', value: 'ai-index-idx-user-memories' },
+    { type: 'data_stream', value: 'ai-index-ds-notes' },
+  ];
+
+  it('is not needed when no AI index keeps users apart', () => {
+    expect(buildAiIndexUserFilter([], ['u-1'])).toBeUndefined();
+  });
+
+  it('keeps other indices, and only the caller’s KIs in user-scoped ones', () => {
+    expect(buildAiIndexUserFilter(dests, ['u-1', 'jdoe'])).toEqual({
+      bool: {
+        should: [
+          {
+            bool: {
+              must_not: [
+                { term: { _index: 'ai-index-idx-user-memories' } },
+                { prefix: { _index: '.ds-ai-index-ds-notes-' } },
+              ],
+            },
+          },
+          { prefix: { id: 'u-1/' } },
+          { prefix: { id: 'jdoe/' } },
+        ],
+        minimum_should_match: 1,
+      },
+    });
+  });
+
+  it('hides every KI of user-scoped indices from a caller with no user id', () => {
+    expect(buildAiIndexUserFilter(dests, [])?.bool?.should).toHaveLength(1);
   });
 });

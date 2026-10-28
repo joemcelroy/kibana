@@ -8,41 +8,25 @@
 import { agentBuilderMocks } from '@kbn/agent-builder-plugin/server/mocks';
 import { contextEngineMemoryTools } from '@kbn/agent-builder-common/tools';
 import { ToolResultType } from '@kbn/agent-builder-common/tools/tool_result';
-import type { ToolHandlerContext } from '@kbn/agent-builder-server';
-import type { ShortTermMemoryServiceApi } from '@kbn/context-engine-plugin/server/short_term_memory/service';
+import type { ToolHandlerContext, ToolHandlerStandardReturn } from '@kbn/agent-builder-server';
 import { coreMock } from '@kbn/core/server/mocks';
-import { assertContextEngineWriteAccess } from '../../assert_context_engine_write_access';
 import { createRememberTool } from './tool';
-
-jest.mock('../../assert_context_engine_write_access', () => ({
-  assertContextEngineWriteAccess: jest.fn(),
-}));
-
-const assertContextEngineWriteAccessMock = jest.mocked(assertContextEngineWriteAccess);
 
 describe('remember tool', () => {
   const remember = jest.fn();
-  const memoryEnabled = jest.fn();
-  const getCurrentUser = jest.fn();
+  const resolveMemoryTargets = jest.fn();
 
   const createTool = () =>
     createRememberTool({
-      getShortTermMemory: async () => ({ remember } as unknown as ShortTermMemoryServiceApi),
-      getCoreStart: async () => {
-        const coreStart = coreMock.createStart();
-        coreStart.uiSettings.globalAsScopedToClient = jest
-          .fn()
-          .mockReturnValue({ get: memoryEnabled });
-        coreStart.security.authc.getCurrentUser = getCurrentUser;
-        return coreStart;
-      },
-      getSecurityStart: async () => undefined,
-      generateId: () => 'memory-1',
-      generateSessionId: () => 'generated-session-id',
-      getCurrentDate: () => new Date('2026-10-23T12:00:00.000Z'),
+      getContextEngineStart: async () => ({ resolveMemoryTargets, remember }),
+      getCoreStart: async () => coreMock.createStart(),
     });
 
-  const createContext = (conversationId: string | undefined, callSource?: 'mcp') => {
+  const createContext = (
+    conversationId: string | undefined,
+    callSource?: 'mcp',
+    aiIndices?: string[]
+  ) => {
     const context = agentBuilderMocks.tools.createHandlerContext();
     return {
       ...context,
@@ -57,6 +41,7 @@ describe('remember tool', () => {
             type: 'agent' as const,
             agentId: 'agent-1',
             ...(conversationId !== undefined && { conversationId }),
+            ...(aiIndices !== undefined && { aiIndices }),
           },
           { type: 'tool' as const, toolId: contextEngineMemoryTools.remember },
         ],
@@ -68,24 +53,40 @@ describe('remember tool', () => {
 
   const run = async (
     input: Parameters<NonNullable<ReturnType<typeof createTool>['handler']>>[0] = params,
-    conversationId: string | undefined = 'conversation-1',
-    callSource?: 'mcp'
+    /** `null` for a call outside a conversation. */
+    conversationId: string | null = 'conversation-1',
+    callSource?: 'mcp',
+    aiIndices?: string[]
   ) => {
     const { handler } = createTool();
     if (!handler) {
       throw new Error('Expected remember tool handler');
     }
-    return handler(input, createContext(conversationId, callSource));
+    return handler(input, createContext(conversationId ?? undefined, callSource, aiIndices));
   };
+
+  const rememberedWith = () => remember.mock.calls[0][0].input;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    assertContextEngineWriteAccessMock.mockResolvedValue();
-    memoryEnabled.mockResolvedValue(true);
-    getCurrentUser.mockReturnValue({ username: 'jdoe', profile_uid: 'u_jdoe' });
+    remember.mockImplementation(async ({ input }) => ({
+      id: 'memory-1',
+      session_id: input.session_id ?? 'generated-session-id',
+      ...(input.ai_index_ids && { ai_index_ids: input.ai_index_ids }),
+    }));
+    const scopes: Record<string, 'shared' | 'user'> = {
+      'support-insights': 'shared',
+      'team-notes': 'shared',
+      'user-memories': 'user',
+    };
+    resolveMemoryTargets.mockImplementation(async ({ aiIndexIds }: { aiIndexIds: string[] }) =>
+      aiIndexIds.flatMap((aiIndexId) =>
+        scopes[aiIndexId] ? [{ aiIndexId, memoryScope: scopes[aiIndexId] }] : []
+      )
+    );
   });
 
-  it('accepts content with an optional session and user flag', () => {
+  it('accepts content with an optional session and user flag, and content only', () => {
     const tool = createTool();
 
     expect(tool.id).toBe(contextEngineMemoryTools.remember);
@@ -93,22 +94,21 @@ describe('remember tool', () => {
     expect(tool.schema.safeParse(params).success).toBe(true);
     expect(tool.schema.safeParse({ ...params, aboutUser: true }).success).toBe(true);
     expect(tool.schema.safeParse({ content: '' }).success).toBe(false);
+    expect(tool.schema.safeParse({}).success).toBe(false);
     expect(tool.schema.shape.sessionId.description).toContain(
       'sessionId returned by an earlier remember call'
     );
   });
 
-  it('appends a shared short-term memory for the conversation', async () => {
-    const result = await run({ ...params, sessionId: 'ignored-session-id' });
+  it('remembers through Context Engine for the conversation, as the request', async () => {
+    const context = createContext('conversation-1');
+    const result = await createTool().handler!({ ...params, sessionId: 'ignored' }, context);
 
-    expect(assertContextEngineWriteAccessMock).toHaveBeenCalled();
-    expect(remember).toHaveBeenCalledWith('space-1', {
-      '@timestamp': '2026-10-23T12:00:00.000Z',
-      id: 'memory-1',
-      session_id: 'conversation-1',
-      content: params.content,
+    expect(remember).toHaveBeenCalledWith({
+      spaceId: 'space-1',
+      request: context.request,
+      input: { content: params.content, session_id: 'conversation-1' },
     });
-    expect(getCurrentUser).not.toHaveBeenCalled();
     expect(result).toEqual({
       results: [
         { type: ToolResultType.other, data: { id: 'memory-1', sessionId: 'conversation-1' } },
@@ -116,18 +116,16 @@ describe('remember tool', () => {
     });
   });
 
-  it('records the current user when the memory is about them', async () => {
+  it('passes on that the memory is about the user', async () => {
     await run({ ...params, aboutUser: true });
 
-    expect(remember).toHaveBeenCalledWith(
-      'space-1',
-      expect.objectContaining({ user_id: 'u_jdoe' })
-    );
+    expect(rememberedWith()).toEqual(expect.objectContaining({ about_user: true }));
   });
 
   it('rejects non-MCP calls outside a conversation', async () => {
-    const result = await run(params, '');
+    const result = await run(params, null);
 
+    expect(remember).not.toHaveBeenCalled();
     expect(result).toEqual({
       results: [
         {
@@ -136,32 +134,23 @@ describe('remember tool', () => {
         },
       ],
     });
-    expect(assertContextEngineWriteAccessMock).not.toHaveBeenCalled();
-    expect(remember).not.toHaveBeenCalled();
   });
 
-  it('generates a session id for an MCP call without one, and reuses a supplied one', async () => {
-    const generated = await run(params, '', 'mcp');
-    const reused = await run({ ...params, sessionId: 'existing-session-id' }, '', 'mcp');
+  it('lets Context Engine generate a session for an MCP call without one, and reuses a supplied one', async () => {
+    const generated = await run(params, null, 'mcp');
+    expect(rememberedWith()).not.toHaveProperty('session_id');
+    expect((generated as ToolHandlerStandardReturn).results[0].data).toEqual({
+      id: 'memory-1',
+      sessionId: 'generated-session-id',
+    });
 
-    expect(remember.mock.calls.map(([, memory]) => memory.session_id)).toEqual([
-      'generated-session-id',
-      'existing-session-id',
-    ]);
-    expect(generated).toEqual({
-      results: [
-        { type: ToolResultType.other, data: { id: 'memory-1', sessionId: 'generated-session-id' } },
-      ],
-    });
-    expect(reused).toEqual({
-      results: [
-        { type: ToolResultType.other, data: { id: 'memory-1', sessionId: 'existing-session-id' } },
-      ],
-    });
+    remember.mockClear();
+    await run({ ...params, sessionId: 'mcp-session' }, null, 'mcp');
+    expect(rememberedWith()).toEqual(expect.objectContaining({ session_id: 'mcp-session' }));
   });
 
-  it('refuses to write when memory is disabled', async () => {
-    memoryEnabled.mockResolvedValue(false);
+  it('reports a refusal from Context Engine as an error result', async () => {
+    remember.mockRejectedValue(new Error('Context Engine memory is not enabled.'));
 
     const result = await run();
 
@@ -173,19 +162,90 @@ describe('remember tool', () => {
         },
       ],
     });
-    expect(remember).not.toHaveBeenCalled();
   });
 
-  it('refuses to write without Context Engine write access', async () => {
-    assertContextEngineWriteAccessMock.mockRejectedValue(new Error('Forbidden'));
+  describe('targets', () => {
+    it('passes requested AI indices and dream now, and returns the dreams', async () => {
+      remember.mockResolvedValue({
+        id: 'memory-1',
+        session_id: 'session-1',
+        ai_index_ids: ['support-insights'],
+        dreams: [{ ai_index_id: 'support-insights', status: 'started', run_id: 'run-9' }],
+      });
 
-    const result = await run();
+      const result = await run(
+        { ...params, sessionId: 'session-1', aiIndexIds: ['support-insights'], dreamNow: true },
+        null,
+        'mcp'
+      );
 
-    expect(result).toEqual({
-      results: [
-        { type: ToolResultType.error, data: { message: 'Failed to store memory: Forbidden' } },
-      ],
+      expect(rememberedWith()).toEqual({
+        content: params.content,
+        session_id: 'session-1',
+        ai_index_ids: ['support-insights'],
+        dream_now: true,
+      });
+      expect((result as ToolHandlerStandardReturn).results[0].data).toEqual({
+        id: 'memory-1',
+        sessionId: 'session-1',
+        aiIndexIds: ['support-insights'],
+        dreams: [{ aiIndexId: 'support-insights', status: 'started', runId: 'run-9' }],
+      });
     });
-    expect(remember).not.toHaveBeenCalled();
+
+    it('treats an empty list as every AI index', async () => {
+      await run({ ...params, aiIndexIds: [] }, null, 'mcp');
+
+      expect(rememberedWith()).not.toHaveProperty('ai_index_ids');
+    });
+
+    it('rejects dream now without targets', async () => {
+      const result = await run({ ...params, dreamNow: true }, null, 'mcp');
+
+      expect(remember).not.toHaveBeenCalled();
+      expect((result as ToolHandlerStandardReturn).results[0].type).toBe(ToolResultType.error);
+    });
+
+    it('rejects an AI index that does not take memories', async () => {
+      const result = await run({ ...params, aiIndexIds: ['nope'] }, null, 'mcp');
+
+      expect(remember).not.toHaveBeenCalled();
+      expect((result as ToolHandlerStandardReturn).results[0].data).toEqual({
+        message: "Failed to store memory: AI indices not found or without memory: 'nope'",
+      });
+    });
+
+    it('sends a memory to the agent’s shared memory AI indices', async () => {
+      await run(params, 'conversation-1', undefined, ['support-insights', 'user-memories']);
+
+      expect(rememberedWith().ai_index_ids).toEqual(['support-insights']);
+    });
+
+    it('sends a memory about the user to all of the agent’s memory AI indices', async () => {
+      await run({ ...params, aboutUser: true }, 'conversation-1', undefined, [
+        'support-insights',
+        'user-memories',
+      ]);
+
+      expect(rememberedWith().ai_index_ids).toEqual(['support-insights', 'user-memories']);
+    });
+
+    it('picks among the agent’s memory AI indices, and refuses others', async () => {
+      await run({ ...params, aiIndexIds: ['team-notes'] }, 'conversation-1', undefined, [
+        'support-insights',
+        'team-notes',
+      ]);
+      expect(rememberedWith().ai_index_ids).toEqual(['team-notes']);
+
+      remember.mockClear();
+      const refused = await run(
+        { ...params, aiIndexIds: ['user-memories'] },
+        'conversation-1',
+        undefined,
+        ['support-insights']
+      );
+      expect(remember).not.toHaveBeenCalled();
+      expect((refused as ToolHandlerStandardReturn).results[0].type).toBe(ToolResultType.error);
+    });
   });
 });

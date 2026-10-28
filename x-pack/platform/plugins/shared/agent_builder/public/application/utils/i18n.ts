@@ -2965,13 +2965,25 @@ export const labels = {
       }),
     },
   },
+  userMemory: {
+    sectionTitle: i18n.translate('xpack.agentBuilder.userMemory.sectionTitle', {
+      defaultMessage: 'Memory',
+    }),
+    sectionDescription: i18n.translate('xpack.agentBuilder.userMemory.sectionDescription', {
+      defaultMessage:
+        'Let the agent remember what it learns about each user, including from their conversations, so later conversations can build on it. Each user sees only their own memories, from every agent, on the Memory page under Manage components, and can stop agents learning from their conversations there.',
+    }),
+    switchLabel: i18n.translate('xpack.agentBuilder.userMemory.switchLabel', {
+      defaultMessage: 'Remember users',
+    }),
+  },
   aiIndices: {
     sectionTitle: i18n.translate('xpack.agentBuilder.aiIndices.sectionTitle', {
       defaultMessage: 'AI Indices',
     }),
     sectionDescription: i18n.translate('xpack.agentBuilder.aiIndices.sectionDescription', {
       defaultMessage:
-        'Choose which AI Indices this agent retrieves from. Default indices are always included and cannot be removed.',
+        'Choose which AI Indices this agent retrieves from. The elastic index can be switched off; other default indices are always included.',
     }),
     notAffectedByElasticCapabilities: i18n.translate(
       'xpack.agentBuilder.aiIndices.notAffectedByElasticCapabilities',

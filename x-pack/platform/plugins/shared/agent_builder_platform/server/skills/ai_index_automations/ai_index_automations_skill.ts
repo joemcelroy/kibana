@@ -7,8 +7,8 @@
 
 import { defineSkillType } from '@kbn/agent-builder-server/skills/type_definition';
 import {
-  contextEngineAiIndexTools,
   contextEngineAutomationTools,
+  contextEngineRecallTools,
   platformCoreTools,
 } from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
@@ -32,7 +32,7 @@ export const aiIndexAutomationsSkill = defineSkillType({
     platformCoreTools.getWorkflowExecutionStatus,
     platformCoreTools.generateEsql,
     platformCoreTools.executeEsql,
-    contextEngineAiIndexTools.queryAiIndices,
+    contextEngineRecallTools.recall,
     `${internalNamespaces.workflows}.validate_workflow`,
     `${internalNamespaces.workflows}.get_workflow`,
     `${internalNamespaces.workflows}.get_step_definitions`,

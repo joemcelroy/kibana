@@ -104,6 +104,65 @@ describe('dreaming apply', () => {
     expect(statusesWritten()).toEqual(['stale']);
   });
 
+  it('writes the entity content summary, and keeps it when an update leaves it out', async () => {
+    const upsert = (content?: string) => ({
+      op: 'upsert_entity' as const,
+      id: 'alice/entity-person-bob',
+      type: 'person',
+      name: 'Bob',
+      ...(content !== undefined && { content }),
+      attributes: {},
+      sourceMemoryIds: ['m-2'],
+      sessionIds: ['s-1'],
+    });
+    findKiRevisionMock.mockResolvedValueOnce(revisionOf(ki('active')));
+    await applyOperations(context, [upsert('Bob prefers tea.')]);
+    findKiRevisionMock.mockResolvedValueOnce(revisionOf(written()[0]));
+    await applyOperations(context, [upsert()]);
+
+    expect(written().map(({ content }) => content)).toEqual([
+      'Bob prefers tea.',
+      'Bob prefers tea.',
+    ]);
+  });
+
+  it('renders access patterns into the content, and keeps them when an update leaves them out', async () => {
+    const accessPatterns = [
+      {
+        question_type: 'orders',
+        esql_template: 'FROM orders | WHERE customer == ?customer',
+        esql_example: 'FROM orders | WHERE customer == "Bob" | LIMIT 5',
+        returns: "Bob's orders",
+      },
+    ];
+    const upsert = (patterns?: typeof accessPatterns) => ({
+      op: 'upsert_entity' as const,
+      id: 'alice/entity-person-bob',
+      type: 'person',
+      name: 'Bob',
+      content: 'Bob prefers tea.',
+      attributes: {},
+      ...(patterns && { accessPatterns: patterns }),
+      sourceMemoryIds: ['m-2'],
+      sessionIds: ['s-1'],
+    });
+    findKiRevisionMock.mockResolvedValueOnce(revisionOf(ki('active')));
+    await applyOperations(context, [upsert(accessPatterns)]);
+    findKiRevisionMock.mockResolvedValueOnce(revisionOf(written()[0]));
+    await applyOperations(context, [upsert()]);
+    findKiRevisionMock.mockResolvedValueOnce(revisionOf(written()[1]));
+    await applyOperations(context, [upsert([])]);
+
+    const [first, kept, cleared] = written();
+    expect(first.content).toContain("## Access patterns\n- [orders] Bob's orders");
+    expect(first.attributes?.esql).toEqual(['FROM orders | WHERE customer == "Bob" | LIMIT 5']);
+    expect(kept.content).toBe(first.content);
+    expect(kept.attributes).toEqual(first.attributes);
+    expect(cleared.content).toBe('Bob prefers tea.');
+    expect(cleared.attributes).not.toHaveProperty('esql');
+    expect(cleared.attributes).not.toHaveProperty('access_patterns');
+  });
+
   it('skips clearing a KI that is not stale', async () => {
     findKiRevisionMock.mockResolvedValue(revisionOf(ki('active')));
 

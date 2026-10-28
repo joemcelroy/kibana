@@ -12,6 +12,7 @@ import type { AgentConfiguration } from '@kbn/agent-builder-common';
 import {
   contextEngineAiIndexTools,
   contextEngineMemoryTools,
+  contextEngineRecallTools,
 } from '@kbn/agent-builder-common/tools';
 import type { ExecutableTool } from '@kbn/agent-builder-server';
 import { createMockedExecutableTool, createToolProviderMock } from '../../../../test_utils';
@@ -172,7 +173,12 @@ describe('selectTools', () => {
 
   describe('AI-index tools', () => {
     const memoryToolIds = Object.values(contextEngineMemoryTools);
-    const aiIndexToolIds = [...Object.values(contextEngineAiIndexTools), ...memoryToolIds];
+    const recallToolIds = Object.values(contextEngineRecallTools);
+    const aiIndexToolIds = [
+      ...Object.values(contextEngineAiIndexTools),
+      ...memoryToolIds,
+      ...recallToolIds,
+    ];
 
     const selectStaticToolIds = async ({
       aiIndicesEnabled,
@@ -215,7 +221,7 @@ describe('selectTools', () => {
       return result.staticTools.map((tool) => tool.id).filter((id) => id !== 'attachments.read');
     };
 
-    it('adds only the memory tools: the read tools come from the `ki-retrieval` skill', async () => {
+    it('adds only the memory and recall tools: the read tools come from the `ki-retrieval` skill', async () => {
       await expect(
         selectStaticToolIds({
           aiIndicesEnabled: true,
@@ -228,10 +234,10 @@ describe('selectTools', () => {
             },
           ],
         })
-      ).resolves.toEqual(memoryToolIds);
+      ).resolves.toEqual([...memoryToolIds, ...recallToolIds]);
     });
 
-    it('adds nothing when every resolved assigned index disables memory', async () => {
+    it('adds only recall when every resolved assigned index disables memory', async () => {
       await expect(
         selectStaticToolIds({
           aiIndicesEnabled: true,
@@ -244,7 +250,7 @@ describe('selectTools', () => {
             },
           ],
         })
-      ).resolves.toEqual([]);
+      ).resolves.toEqual(recallToolIds);
     });
 
     it('adds nothing when assigned indices cannot be resolved or read', async () => {
@@ -257,7 +263,7 @@ describe('selectTools', () => {
       ).resolves.toEqual([]);
     });
 
-    it('adds the memory tools when any resolved assigned index enables memory', async () => {
+    it('adds the memory and recall tools when any resolved assigned index enables memory', async () => {
       await expect(
         selectStaticToolIds({
           aiIndicesEnabled: true,
@@ -275,7 +281,7 @@ describe('selectTools', () => {
             },
           ],
         })
-      ).resolves.toEqual(memoryToolIds);
+      ).resolves.toEqual([...memoryToolIds, ...recallToolIds]);
     });
 
     it('adds nothing when the agent has no AI Indices', async () => {

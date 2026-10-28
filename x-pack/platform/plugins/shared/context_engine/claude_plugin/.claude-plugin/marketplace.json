@@ -1,0 +1,16 @@
+{
+  "name": "elastic-context-engine",
+  "owner": {
+    "name": "Elastic"
+  },
+  "plugins": [
+    {
+      "name": "context-engine",
+      "source": "./",
+      "description": "Elastic Context Engine memory for Claude Code."
+    }
+  ],
+  "metadata": {
+    "description": "Elastic Context Engine memory for Claude Code."
+  }
+}

@@ -7,7 +7,7 @@
 
 import { elasticsearchServiceMock } from '@kbn/core/server/mocks';
 import type { ShortTermMemory } from '../../common/dreaming';
-import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import type { DreamingMemoryReader } from './memory_reader';
 import { applyOperations, deleteKi, pruneSources } from './apply';
 import { DreamingTaskNotFoundError, InvalidChangeSetError } from './errors';
 import { graphifyTask, type GraphifyParams } from './graphify';
@@ -80,12 +80,13 @@ const setup = ({
     getTask: jest.fn().mockResolvedValue(saved),
     saveTask: jest.fn(),
   };
-  const shortTermMemory = {
+  const memoryReader = {
     getByIds: jest.fn(async (_spaceId: string, ids: readonly string[]) =>
       memories.filter(({ id }) => ids.includes(id))
     ),
   };
   const model = jest.fn().mockResolvedValue(modelOutput);
+  const verifyEsql = jest.fn(async (query: string) => !query.includes('missing_field'));
   const params: GraphifyParams = {
     spaceId: 'default',
     aiIndexId: 'memory',
@@ -95,11 +96,12 @@ const setup = ({
     config: { enabled: true },
     dryRun: false,
     esClient: elasticsearchServiceMock.createElasticsearchClient(),
-    shortTermMemory: shortTermMemory as unknown as ShortTermMemoryServiceApi,
+    memoryReader: memoryReader as unknown as DreamingMemoryReader,
     runProgress: runProgress as unknown as DreamingRunProgress,
     getModel: async () => model,
+    verifyEsql,
   };
-  return { params, runProgress, model };
+  return { params, runProgress, model, verifyEsql };
 };
 
 describe('graphifyTask', () => {
@@ -124,7 +126,45 @@ describe('graphifyTask', () => {
     expect(operations).toEqual([
       expect.objectContaining({ op: 'upsert_fact', content: 'Alice likes tea' }),
     ]);
-    expect(result).toEqual({ task_id: 'task-1', status: 'applied', rejected: 0, ...counts });
+    expect(result).toEqual({
+      task_id: 'task-1',
+      status: 'applied',
+      rejected: 0,
+      access_patterns_dropped: 0,
+      ...counts,
+    });
+  });
+
+  it('drops access patterns whose example does not run before saving the plan', async () => {
+    const pattern = (label: string, field: string) => ({
+      question_type: label,
+      esql_template: `FROM orders | WHERE customer == ?customer | KEEP ${field}`,
+      esql_example: `FROM orders | WHERE customer == "alice" | KEEP ${field} | LIMIT 5`,
+      returns: `Alice's ${field}`,
+    });
+    const { params, runProgress, verifyEsql } = setup({
+      modelOutput: {
+        facts: [
+          {
+            ref: 'new:1',
+            type: 'fact',
+            title: 'Alice orders',
+            content: 'Alice orders tea',
+            access_patterns: [pattern('orders', 'item'), pattern('broken', 'missing_field')],
+            source_memory_ids: ['m-1'],
+          },
+        ],
+      },
+    });
+
+    const result = await graphifyTask(params);
+
+    expect(verifyEsql).toHaveBeenCalledTimes(2);
+    expect(result.access_patterns_dropped).toBe(1);
+    const [[, , , { operations }]] = runProgress.saveTask.mock.calls;
+    expect(operations).toEqual([
+      expect.objectContaining({ accessPatterns: [pattern('orders', 'item')] }),
+    ]);
   });
 
   it('re-applies a saved plan without asking the model again', async () => {

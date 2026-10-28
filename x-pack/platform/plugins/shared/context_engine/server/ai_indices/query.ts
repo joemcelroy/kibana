@@ -17,22 +17,29 @@ import type {
   QueryAiIndicesRequest,
   QueryAiIndicesResponse,
 } from '../../common/http_api/ai_indices';
-import { buildAiIndexSpaceFilter } from '../../common/space_filter';
+import { buildAiIndexSpaceFilter, buildAiIndexUserFilter } from '../../common/space_filter';
 import { validateQueryAiIndicesRequest } from '../../common/validation';
 import { applyLimit } from './apply_limit';
 import { AiIndexQueryResponseTooLargeError, InvalidAiIndexQueryError } from './errors';
 import { applyKiLifecycle } from './ki_lifecycle';
+import { isAiIndexDest, missingIndicesOf, withoutSources } from './missing_indices';
 
 export interface QueryAiIndicesParams extends QueryAiIndicesRequest {
   esClient: ElasticsearchClient;
   spaceId: string;
   /** Registered AI index dests; a query reading one gets the lifecycle pipeline applied. */
   aiIndexDests?: AiIndexDest[];
+  /** Dests of AI indices that keep each user's memory apart; the caller only reads their own. */
+  userScopedDests?: AiIndexDest[];
+  /** Ids the caller's KIs in `userScopedDests` can be owned by: profile uid and username. */
+  userIds?: readonly string[];
 }
 
 /**
  * Runs caller-supplied ES|QL with server-owned lifecycle filters, space filter and row cap.
- * `allow_partial_results` may silently drop failed shards.
+ * `allow_partial_results` may silently drop failed shards. A registered AI index's backing index
+ * is created on its first write, so until then it reads as empty: the query runs without it, and
+ * returns no rows when it read nothing else.
  */
 export const queryAiIndices = async ({
   esClient,
@@ -41,7 +48,11 @@ export const queryAiIndices = async ({
   params,
   limit,
   aiIndexDests = [],
+  userScopedDests = [],
+  userIds = [],
 }: QueryAiIndicesParams): Promise<QueryAiIndicesResponse> => {
+  const spaceFilter = buildAiIndexSpaceFilter(spaceId);
+  const userFilter = buildAiIndexUserFilter(userScopedDests, userIds);
   const validationError = validateQueryAiIndicesRequest({ query, params, limit });
   if (validationError) {
     throw new InvalidAiIndexQueryError(validationError);
@@ -51,14 +62,14 @@ export const queryAiIndices = async ({
     [name]: value,
   }));
 
-  try {
+  const run = async (source: string): Promise<QueryAiIndicesResponse> => {
     const { columns, values } = await esClient.esql.query(
       {
         query: applyLimit(
-          applyKiLifecycle(query, aiIndexDests),
+          applyKiLifecycle(source, aiIndexDests),
           limit ?? DEFAULT_AI_INDEX_QUERY_LIMIT
         ),
-        filter: buildAiIndexSpaceFilter(spaceId),
+        filter: userFilter ? { bool: { filter: [spaceFilter, userFilter] } } : spaceFilter,
         drop_null_columns: true,
         allow_partial_results: true,
         ...(namedParams.length > 0 ? { params: namedParams } : {}),
@@ -66,10 +77,29 @@ export const queryAiIndices = async ({
       { maxResponseSize: MAX_AI_INDEX_QUERY_RESPONSE_BYTES }
     );
     return { columns, values };
-  } catch (error) {
-    if (isMaximumResponseSizeExceededError(error)) {
-      throw new AiIndexQueryResponseTooLargeError(MAX_AI_INDEX_QUERY_RESPONSE_BYTES);
+  };
+
+  let current = query;
+  // Each retry drops at least one source, so this ends.
+  for (;;) {
+    try {
+      return await run(current);
+    } catch (error) {
+      if (isMaximumResponseSizeExceededError(error)) {
+        throw new AiIndexQueryResponseTooLargeError(MAX_AI_INDEX_QUERY_RESPONSE_BYTES);
+      }
+      const missing = missingIndicesOf(error);
+      if (missing.length === 0 || !missing.every((index) => isAiIndexDest(index, aiIndexDests))) {
+        throw error;
+      }
+      const remaining = withoutSources(current, missing);
+      if (remaining === undefined) {
+        return { columns: [], values: [] };
+      }
+      if (remaining === current) {
+        throw error;
+      }
+      current = remaining;
     }
-    throw error;
   }
 };

@@ -26,6 +26,7 @@
     "@kbn/agent-builder-tools-base",
     "@kbn/core-http-server-mocks",
     "@kbn/workflows",
+    "@kbn/workflows-extensions",
     "@kbn/workflows-yaml",
     "@kbn/agent-builder-plugin",
     "@kbn/spaces-plugin",

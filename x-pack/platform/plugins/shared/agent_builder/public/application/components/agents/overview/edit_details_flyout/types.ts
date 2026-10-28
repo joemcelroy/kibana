@@ -21,6 +21,8 @@ export interface EditDetailsFormData {
     post_execution_workflow_ids: string[];
     instructions: string;
     ai_indices: string[];
+    enable_elastic_ai_index?: boolean;
+    enable_user_memory?: boolean;
     subagent_ids: string[];
     auto_approved_apis: AutoApprovedApisValue;
   };

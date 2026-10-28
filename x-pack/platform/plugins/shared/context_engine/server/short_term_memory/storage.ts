@@ -18,6 +18,7 @@ const shortTermMemoryMappings = {
     content: { type: 'semantic_text' },
     attributes: { type: 'flattened' },
     occurred_at: { type: 'date' },
+    ai_index_ids: { type: 'keyword' },
   },
 } satisfies MappingsDefinition;
 
@@ -26,7 +27,7 @@ export type ShortTermMemoryMappings = typeof shortTermMemoryMappings;
 /** The shared stream `_remember` appends to and every AI index's dreaming reads from. */
 export const shortTermMemoryDataStreamDefinition: DataStreamDefinition<ShortTermMemoryMappings> = {
   name: SHORT_TERM_MEMORY_DATA_STREAM,
-  version: 1,
+  version: 4,
   hidden: true,
   template: {
     settings: {

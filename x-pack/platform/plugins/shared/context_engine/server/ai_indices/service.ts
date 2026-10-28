@@ -27,6 +27,7 @@ import type {
   AiIndexDreaming,
   AiIndexDreamingConfig,
   AiIndexDreamingState,
+  ManagedDreamingConfig,
 } from '../../common/dreaming';
 import { isIndexPattern } from '../../common/ai_index_dest';
 import { InvalidDreamingConfigError } from '../dreaming/errors';
@@ -59,6 +60,7 @@ const resolveMemoryEnabled = (
 const toAiIndexItem = (document: AiIndexDocument): AiIndexHttpItem => ({
   id: document.id,
   ...(document.description !== undefined && { description: document.description }),
+  ...(document.memory_scope !== undefined && { memory_scope: document.memory_scope }),
   ...(document.feedback_analysis !== undefined && {
     feedback_analysis: document.feedback_analysis,
   }),
@@ -79,7 +81,15 @@ const mergeManagedAiIndex = (
 ): AiIndexDocument => ({
   ...document,
   dest: registration.dest,
+  ...(registration.memory_scope !== undefined && { memory_scope: registration.memory_scope }),
 });
+
+/** Applies a registered dreaming config over what is saved; dreaming stays off until turned on. */
+const withManagedDreaming = (
+  dreaming: AiIndexDreaming | undefined,
+  registered: ManagedDreamingConfig | undefined
+): AiIndexDreaming | undefined =>
+  registered ? { enabled: false, ...dreaming, ...registered } : dreaming;
 
 const ADD_AUTOMATION_CONFLICT_RETRIES = 2;
 const DREAMING_STATE_CONFLICT_RETRIES = 3;
@@ -109,6 +119,8 @@ export interface AiIndexManagedBootstrap {
   isManaged: (id: string) => boolean;
   getManagedIds: () => string[];
   getRegistration: (id: string) => AiIndexProperties | undefined;
+  /** The dreaming config a plugin registered with a managed AI index, if any. */
+  getDreamingConfig?: (id: string) => ManagedDreamingConfig | undefined;
   ensure: (id: string, spaceId: string) => Promise<boolean>;
 }
 
@@ -363,9 +375,19 @@ export class AiIndexService {
     if (!existing) {
       // Bootstraps a managed entry, or throws when the AI index does not exist.
       await this.get(aiIndexId, spaceId);
-      return undefined;
+      return withManagedDreaming(undefined, this.registeredDreaming(aiIndexId, true));
     }
-    return existing.document.dreaming;
+    return withManagedDreaming(
+      existing.document.dreaming,
+      this.registeredDreaming(aiIndexId, existing.document.managed)
+    );
+  }
+
+  private registeredDreaming(
+    aiIndexId: string,
+    managed: boolean | undefined
+  ): ManagedDreamingConfig | undefined {
+    return managed ? this.managedBootstrap?.getDreamingConfig?.(aiIndexId) : undefined;
   }
 
   /**
@@ -391,8 +413,10 @@ export class AiIndexService {
         );
       }
       const state = existing.document.dreaming?.state ?? { retry: [] };
+      const registered = this.registeredDreaming(aiIndexId, existing.document.managed);
       dreaming = {
         ...config,
+        ...registered,
         state:
           config.enabled && state.cursor === undefined
             ? { ...state, cursor: { timestamp: now.toISOString(), memory_id: '' } }
@@ -461,7 +485,11 @@ export class AiIndexService {
         return [];
       }
       const document = toAiIndexDocument(hit._source, hit._id);
-      if (!document.dreaming?.enabled) {
+      const dreaming = withManagedDreaming(
+        document.dreaming,
+        this.registeredDreaming(document.id, document.managed)
+      );
+      if (!dreaming?.enabled) {
         return [];
       }
       const registration = document.managed
@@ -471,7 +499,7 @@ export class AiIndexService {
         {
           id: document.id,
           dest: registration?.dest ?? document.dest,
-          dreaming: document.dreaming,
+          dreaming,
         },
       ];
     });

@@ -745,6 +745,104 @@ describe('AiIndexService', () => {
     });
   });
 
+  describe('registered memory scope and dreaming', () => {
+    const registered = {
+      group_by: 'user_id' as const,
+      sessions: true,
+      instructions: 'Keep a profile.',
+      entities: [{ type: 'user' }],
+    };
+    const managedDocument: AiIndexDocument = {
+      ...aiIndexDocument,
+      id: 'user-memories',
+      managed: true,
+      memory_enabled: true,
+    };
+
+    const createManagedService = () =>
+      new AiIndexService({
+        esClient,
+        logger: loggingSystemMock.createLogger(),
+        managedBootstrap: {
+          isManaged: (id) => id === 'user-memories',
+          getManagedIds: () => ['user-memories'],
+          getRegistration: () => ({
+            memory_enabled: true,
+            memory_scope: 'user',
+            dest: managedDocument.dest,
+            automations: [],
+            sources: [],
+            traces: [],
+          }),
+          getDreamingConfig: (id) => (id === 'user-memories' ? registered : undefined),
+          ensure: jest.fn(),
+        },
+      });
+
+    it('reports the registered memory scope', async () => {
+      mockSearchHits(storedHit(managedDocument));
+
+      await expect(createManagedService().get('user-memories', DEFAULT_SPACE)).resolves.toEqual(
+        expect.objectContaining({ memory_scope: 'user' })
+      );
+    });
+
+    it('reads the registered dreaming config, off until someone turns it on', async () => {
+      mockSearchHits(storedHit(managedDocument));
+
+      await expect(
+        createManagedService().getDreaming('user-memories', DEFAULT_SPACE)
+      ).resolves.toEqual({ enabled: false, ...registered });
+    });
+
+    it('keeps the registered config when dreaming is turned on, taking only enabled and schedule', async () => {
+      mockSearchHits(storedHit(managedDocument));
+
+      const dreaming = await createManagedService().setDreamingConfig(
+        'user-memories',
+        DEFAULT_SPACE,
+        { enabled: true, schedule: { interval: '1h' }, instructions: 'Ignored.' },
+        new Date('2026-10-26T09:00:00.000Z')
+      );
+
+      expect(dreaming).toEqual({
+        enabled: true,
+        schedule: { interval: '1h' },
+        ...registered,
+        state: { retry: [], cursor: { timestamp: '2026-10-26T09:00:00.000Z', memory_id: '' } },
+      });
+      expect(storageClient.index.mock.calls[0][0].document?.dreaming).toEqual(dreaming);
+    });
+  });
+
+  describe('conversation rounds', () => {
+    it.each([
+      ['a shared AI index', undefined],
+      ['an AI index that keeps each user’s memory apart', 'user' as const],
+    ])('accepts rounds, or turning them off, for %s', async (_, memoryScope) => {
+      mockSearchHits(
+        storedHit({
+          ...aiIndexDocument,
+          memory_enabled: true,
+          ...(memoryScope && { memory_scope: memoryScope }),
+        })
+      );
+
+      await expect(
+        service.setDreamingConfig(aiIndexDocument.id, DEFAULT_SPACE, {
+          enabled: true,
+          rounds: true,
+        })
+      ).resolves.toEqual(expect.objectContaining({ rounds: true }));
+      await expect(
+        service.setDreamingConfig(aiIndexDocument.id, DEFAULT_SPACE, {
+          enabled: true,
+          rounds: false,
+        })
+      ).resolves.toEqual(expect.objectContaining({ rounds: false }));
+    });
+  });
+
   describe('setFeedbackAnalysis', () => {
     const feedbackAnalysis = {
       enabled: true,

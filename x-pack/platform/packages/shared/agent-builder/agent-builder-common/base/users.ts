@@ -39,4 +39,9 @@ export const isUserProfileId = (id: string | undefined): id is string =>
  */
 export interface CurrentUser extends UserIdAndName {
   isAdmin: boolean;
+  /**
+   * For an API key whose creator has a profile: the creator's realm-qualified id, which their
+   * requests without a profile (basic auth) are known by. It owns what those requests created.
+   */
+  realmId?: string;
 }

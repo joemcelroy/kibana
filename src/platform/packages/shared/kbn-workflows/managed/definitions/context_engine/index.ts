@@ -9,6 +9,7 @@
 
 import DREAMING_YAML from './dreaming.yaml';
 import FEEDBACK_ANALYSIS_YAML from './feedback_analysis.yaml';
+import ROUND_CAPTURE_YAML from './round_capture.yaml';
 import type { ManagedWorkflowDefinition, ManagedWorkflowTemplateValues } from '../../types';
 
 export const CONTEXT_ENGINE_FEEDBACK_ANALYSIS_WORKFLOW_ID =
@@ -72,3 +73,24 @@ export const CONTEXT_ENGINE_DREAMING_WORKFLOW = {
     }),
   management: CONTEXT_ENGINE_WORKFLOW_MANAGEMENT,
 } as const satisfies ManagedWorkflowDefinition<ContextEngineDreamingWorkflowTemplateValues>;
+
+/** Matches `agentBuilderRoundCaptureWorkflowId` in `@kbn/agent-builder-common`. */
+export const CONTEXT_ENGINE_ROUND_CAPTURE_WORKFLOW_ID = 'system-context-engine-round-capture';
+
+/**
+ * Saves the transcript of each completed Agent Builder round in Context Engine. Agent Builder runs it after
+ * every round of an agent that has an AI index or remembers users. Installed once, in the global
+ * space, by `contextEngineAgentBuilder`, whose `context-engine.captureRound` step does the work.
+ */
+export const CONTEXT_ENGINE_ROUND_CAPTURE_WORKFLOW = {
+  id: CONTEXT_ENGINE_ROUND_CAPTURE_WORKFLOW_ID,
+  pluginId: 'contextEngineAgentBuilder',
+  version: 1,
+  billable: false,
+  yaml: ROUND_CAPTURE_YAML,
+  management: {
+    lifecycle: 'static',
+    versionStrategy: 'auto',
+    enablement: 'enforced',
+  },
+} as const satisfies ManagedWorkflowDefinition;

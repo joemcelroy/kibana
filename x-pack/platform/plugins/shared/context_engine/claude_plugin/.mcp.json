@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "context-engine": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp_server.mjs"],
+      "env": {
+        "KIBANA_URL": "${user_config.kibana_url}",
+        "KIBANA_API_KEY": "${user_config.api_key}",
+        "KIBANA_SPACE_ID": "${user_config.space_id}",
+        "CONTEXT_ENGINE_AI_INDEX_IDS": "${user_config.ai_index_ids}"
+      }
+    }
+  }
+}

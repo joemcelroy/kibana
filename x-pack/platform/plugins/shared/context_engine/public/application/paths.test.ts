@@ -9,6 +9,7 @@ import {
   decodeRouteParam,
   getAiIndexDetailPath,
   getAiIndexKnowledgeIndicatorsPath,
+  getAiIndexSettingsPath,
   getViewKiPath,
 } from './paths';
 
@@ -23,6 +24,12 @@ describe('getAiIndexKnowledgeIndicatorsPath', () => {
     expect(getAiIndexKnowledgeIndicatorsPath('my-ai-index')).toBe(
       '/ai_index/my-ai-index/knowledge_indicators'
     );
+  });
+});
+
+describe('getAiIndexSettingsPath', () => {
+  it('builds the settings tab path', () => {
+    expect(getAiIndexSettingsPath('my-ai-index')).toBe('/ai_index/my-ai-index/settings');
   });
 });
 

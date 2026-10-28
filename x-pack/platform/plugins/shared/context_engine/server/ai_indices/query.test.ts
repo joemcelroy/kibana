@@ -17,9 +17,24 @@ import {
   MAX_AI_INDEX_QUERY_RESPONSE_BYTES,
 } from '../../common/constants';
 import type { QueryAiIndicesRequest } from '../../common/http_api/ai_indices';
-import { buildAiIndexSpaceFilter } from '../../common/space_filter';
+import { buildAiIndexSpaceFilter, buildAiIndexUserFilter } from '../../common/space_filter';
 import { AiIndexQueryResponseTooLargeError, InvalidAiIndexQueryError } from './errors';
 import { queryAiIndices } from './query';
+
+const esqlError = (error: Record<string, unknown>) =>
+  new errors.ResponseError({
+    meta: {
+      aborted: false,
+      attempts: 1,
+      connection: null,
+      context: null,
+      name: 'response_error',
+      request: {} as never,
+    },
+    warnings: [],
+    body: { error, status: 400 },
+    statusCode: 400,
+  });
 
 describe('queryAiIndices', () => {
   const esqlQuery = jest.fn();
@@ -51,6 +66,79 @@ describe('queryAiIndices', () => {
       },
       { maxResponseSize: MAX_AI_INDEX_QUERY_RESPONSE_BYTES }
     );
+  });
+
+  it('keeps the caller to their own KIs in user-scoped AI indices', async () => {
+    const userScopedDests = [{ type: 'index' as const, value: 'ai-index-idx-user-memories' }];
+    await queryAiIndices({
+      esClient,
+      spaceId: 'marketing',
+      query: 'FROM ai-index-idx-*',
+      userScopedDests,
+      userIds: ['u-1'],
+    });
+
+    expect(lastRequest().filter).toEqual({
+      bool: {
+        filter: [
+          buildAiIndexSpaceFilter('marketing'),
+          buildAiIndexUserFilter(userScopedDests, ['u-1']),
+        ],
+      },
+    });
+  });
+
+  describe('an AI index whose backing index does not exist yet', () => {
+    const aiIndexDests = [
+      { type: 'index' as const, value: 'ai-index-idx-user-memories' },
+      { type: 'index' as const, value: 'ai-index-idx-notes' },
+    ];
+
+    it('returns no rows when it is the only source', async () => {
+      esqlQuery.mockRejectedValueOnce(
+        esqlError({
+          type: 'verification_exception',
+          reason: 'Unknown index [ai-index-idx-user-memories]',
+        })
+      );
+
+      await expect(
+        queryAiIndices({
+          esClient,
+          spaceId: 'default',
+          query: 'FROM ai-index-idx-user-memories | KEEP id',
+          aiIndexDests,
+        })
+      ).resolves.toEqual({ columns: [], values: [] });
+      expect(esqlQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('reruns without it when the query also reads other indices', async () => {
+      esqlQuery.mockRejectedValueOnce(
+        esqlError({ type: 'index_not_found_exception', index: 'ai-index-idx-user-memories' })
+      );
+
+      await expect(
+        queryAiIndices({
+          esClient,
+          spaceId: 'default',
+          query: 'FROM ai-index-idx-notes, ai-index-idx-user-memories | KEEP id',
+          aiIndexDests,
+        })
+      ).resolves.toEqual({ columns, values });
+      expect(esqlQuery).toHaveBeenCalledTimes(2);
+      expect(esqlQuery.mock.calls[1][0].query).toMatch(/^FROM ai-index-idx-notes\b/);
+      expect(esqlQuery.mock.calls[1][0].query).not.toContain('user-memories');
+    });
+
+    it('still fails for an index that is not an AI index', async () => {
+      const error = esqlError({ type: 'verification_exception', reason: 'Unknown index [logs]' });
+      esqlQuery.mockRejectedValueOnce(error);
+
+      await expect(
+        queryAiIndices({ esClient, spaceId: 'default', query: 'FROM logs', aiIndexDests })
+      ).rejects.toBe(error);
+    });
   });
 
   it('narrows a trailing LIMIT above the caller limit', async () => {

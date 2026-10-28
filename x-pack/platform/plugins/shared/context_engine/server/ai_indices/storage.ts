@@ -14,6 +14,7 @@ import type {
   AiIndexFeedbackAnalysis,
   AiIndexSource,
   AiIndexTrace,
+  AiIndexMemoryScope,
 } from '../../common/http_api/ai_indices';
 import type { AiIndexDreaming } from '../../common/dreaming';
 
@@ -33,6 +34,7 @@ const storageSettings = {
       description: types.text({}),
       managed: types.boolean({}),
       memory_enabled: types.boolean({}),
+      memory_scope: types.keyword({}),
       date_created: types.date({}),
       date_modified: types.date({}),
       dest: types.object({
@@ -75,6 +77,8 @@ interface AiIndexDocumentFields {
   // Optional for backward compatibility with entries written before memory
   // support existed; absence is treated as enabled (`true`) on read.
   memory_enabled?: boolean;
+  // Absent means `shared`.
+  memory_scope?: AiIndexMemoryScope;
   // Optional for backward compatibility with entries written before managed
   // indices existed; absence is treated as unmanaged (`false`) on read.
   managed?: boolean;

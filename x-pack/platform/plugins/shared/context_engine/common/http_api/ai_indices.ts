@@ -84,9 +84,18 @@ export interface AiIndexFeedbackAnalysis {
   allowed_actions?: ImprovementAction[];
 }
 
+/**
+ * Whose long-term memory an AI index holds. `user` keeps each user's memory apart: it dreams only
+ * memories that target it and name a user, and reads return only the caller's own KIs.
+ */
+export const AI_INDEX_MEMORY_SCOPES = ['shared', 'user'] as const;
+export type AiIndexMemoryScope = (typeof AI_INDEX_MEMORY_SCOPES)[number];
+
 export interface AiIndexProperties {
   description?: string;
   memory_enabled?: boolean;
+  /** Defaults to `shared`. Only managed AI indices can set it for now. */
+  memory_scope?: AiIndexMemoryScope;
   dest: AiIndexDest;
   automations: AiIndexAutomation[];
   sources: AiIndexSource[];

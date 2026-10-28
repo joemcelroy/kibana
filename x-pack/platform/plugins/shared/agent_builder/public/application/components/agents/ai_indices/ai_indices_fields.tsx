@@ -10,6 +10,7 @@ import type { EuiComboBoxOptionOption } from '@elastic/eui';
 import {
   EuiBadge,
   EuiBadgeGroup,
+  EuiCheckbox,
   EuiComboBox,
   EuiFormRow,
   EuiFlexGroup,
@@ -19,6 +20,10 @@ import {
   EuiTextBlockTruncate,
 } from '@elastic/eui';
 import { KbnDangerCallout } from '@kbn/ui-callout';
+import {
+  agentBuilderDefaultAiIndexId,
+  agentBuilderUserMemoriesAiIndexId,
+} from '@kbn/agent-builder-common';
 import type { AiIndexHttpItem } from '@kbn/context-engine-plugin/common/http_api/ai_indices';
 import type { AgentAiIndicesWarning } from '../../../../../common/http_api/agents';
 import { useAgentAiIndicesById } from '../../../hooks/ai_indices/use_agent_ai_indices_by_id';
@@ -53,6 +58,12 @@ export const useAiIndices = (agentId?: string) => {
   };
 };
 
+/**
+ * AI indices with their own switch on the agent: `elastic` as a checkbox here, `user-memories` in
+ * the agent's Memory settings. Neither is listed as a fixed default or offered in the picker.
+ */
+const builtinIdSet = new Set([agentBuilderDefaultAiIndexId, agentBuilderUserMemoriesAiIndexId]);
+
 export interface AiIndicesFieldsProps {
   aiIndices: Array<Pick<AiIndexHttpItem, 'id' | 'description'>>;
   /** AI Indices assigned to the agent itself: editable, and the only ones a change writes back. */
@@ -64,6 +75,12 @@ export interface AiIndicesFieldsProps {
   error?: Error;
   isFormDisabled: boolean;
   onChange: (assignedIds: string[]) => void;
+  /** The agent's `enable_elastic_ai_index`; unset means on. */
+  elasticAiIndexEnabled?: boolean;
+  /** Shows the `elastic` checkbox when the agent's type provides that AI index. */
+  onElasticAiIndexChange?: (enabled: boolean) => void;
+  /** Creating an agent: its type's default AI indices are not known yet. */
+  isNewAgent?: boolean;
 }
 
 export const AiIndicesFields: React.FC<AiIndicesFieldsProps> = ({
@@ -75,8 +92,25 @@ export const AiIndicesFields: React.FC<AiIndicesFieldsProps> = ({
   error,
   isFormDisabled,
   onChange,
+  elasticAiIndexEnabled,
+  onElasticAiIndexChange,
+  isNewAgent = false,
 }) => {
-  const inheritedIdSet = useMemo(() => new Set(inheritedIds), [inheritedIds]);
+  const inheritedIdSet = useMemo(() => new Set([...inheritedIds, ...builtinIdSet]), [inheritedIds]);
+  const inheritedBadgeIds = useMemo(
+    () => inheritedIds.filter((id) => !builtinIdSet.has(id)),
+    [inheritedIds]
+  );
+
+  // Only agents whose type provides the `elastic` AI index can switch it.
+  const elasticAiIndex = useMemo(() => {
+    const available = aiIndices.find(({ id }) => id === agentBuilderDefaultAiIndexId);
+    const applies =
+      isNewAgent ||
+      inheritedIds.includes(agentBuilderDefaultAiIndexId) ||
+      elasticAiIndexEnabled === false;
+    return onElasticAiIndexChange && available && applies ? available : undefined;
+  }, [aiIndices, inheritedIds, isNewAgent, elasticAiIndexEnabled, onElasticAiIndexChange]);
 
   // Inherited ids are listed above as defaults, so they are not shown again here.
   const hiddenAssignedIds = useMemo(
@@ -152,10 +186,10 @@ export const AiIndicesFields: React.FC<AiIndicesFieldsProps> = ({
     const availableIds = new Set(aiIndices.map(({ id }) => id));
     const isMissing = (id: string) => !availableIds.has(id);
     return {
-      inherited: inheritedIds.filter(isMissing),
+      inherited: inheritedBadgeIds.filter(isMissing),
       assigned: selectedOptions.map(({ label }) => label).filter(isMissing),
     };
-  }, [aiIndices, inheritedIds, selectedOptions, isLoading, error]);
+  }, [aiIndices, inheritedBadgeIds, selectedOptions, isLoading, error]);
 
   const handleChange = useCallback(
     (newSelectedOptions: Array<EuiComboBoxOptionOption<string>>) =>
@@ -182,7 +216,7 @@ export const AiIndicesFields: React.FC<AiIndicesFieldsProps> = ({
         </EuiFlexItem>
       )}
 
-      {inheritedIds.length > 0 && (
+      {(inheritedBadgeIds.length > 0 || elasticAiIndex) && (
         <EuiFlexItem grow={false}>
           <EuiFormRow
             label={labels.aiIndices.defaultIndicesLabel}
@@ -200,18 +234,51 @@ export const AiIndicesFields: React.FC<AiIndicesFieldsProps> = ({
             }
             fullWidth
           >
-            <EuiBadgeGroup gutterSize="s" role="list" data-test-subj="agentBuilderDefaultAiIndices">
-              {inheritedIds.map((id) => (
-                <EuiBadge
-                  key={id}
-                  color="hollow"
-                  role="listitem"
-                  data-test-subj={`agentBuilderDefaultAiIndex-${id}`}
-                >
-                  {labels.aiIndices.defaultIndexBadge(id)}
-                </EuiBadge>
-              ))}
-            </EuiBadgeGroup>
+            <EuiFlexGroup direction="column" gutterSize="s">
+              {elasticAiIndex && (
+                <EuiFlexItem grow={false}>
+                  <EuiCheckbox
+                    id="agentBuilderElasticAiIndex"
+                    data-test-subj="agentBuilderElasticAiIndex"
+                    checked={elasticAiIndexEnabled !== false}
+                    onChange={(event) => onElasticAiIndexChange?.(event.target.checked)}
+                    disabled={isFormDisabled}
+                    label={
+                      <>
+                        <strong>{elasticAiIndex.id}</strong>
+                        {elasticAiIndex.description && (
+                          <EuiText size="xs" color="subdued">
+                            <EuiTextBlockTruncate lines={2} title={elasticAiIndex.description}>
+                              {elasticAiIndex.description}
+                            </EuiTextBlockTruncate>
+                          </EuiText>
+                        )}
+                      </>
+                    }
+                  />
+                </EuiFlexItem>
+              )}
+              {inheritedBadgeIds.length > 0 && (
+                <EuiFlexItem grow={false}>
+                  <EuiBadgeGroup
+                    gutterSize="s"
+                    role="list"
+                    data-test-subj="agentBuilderDefaultAiIndices"
+                  >
+                    {inheritedBadgeIds.map((id) => (
+                      <EuiBadge
+                        key={id}
+                        color="hollow"
+                        role="listitem"
+                        data-test-subj={`agentBuilderDefaultAiIndex-${id}`}
+                      >
+                        {labels.aiIndices.defaultIndexBadge(id)}
+                      </EuiBadge>
+                    ))}
+                  </EuiBadgeGroup>
+                </EuiFlexItem>
+              )}
+            </EuiFlexGroup>
           </EuiFormRow>
         </EuiFlexItem>
       )}

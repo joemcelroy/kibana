@@ -546,6 +546,14 @@ export const aiIndexHttpItemResponseSchema = () =>
     memory_enabled: schema.boolean({
       meta: { description: 'Whether this AI Index accepts memory writes.' },
     }),
+    memory_scope: schema.maybe(
+      schema.oneOf([schema.literal('shared'), schema.literal('user')], {
+        meta: {
+          description:
+            "Whose memory the AI Index holds. `user` keeps each user's memory apart: reads return only the caller's own KIs. Absent means `shared`.",
+        },
+      })
+    ),
     date_created: schema.string({
       meta: { description: 'ISO 8601 timestamp of when the AI Index was created.' },
     }),

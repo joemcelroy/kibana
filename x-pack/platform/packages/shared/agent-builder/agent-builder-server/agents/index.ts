@@ -45,6 +45,12 @@ export {
   ADMIN_INSTRUCTIONS_HEADER,
   type AgentBaseConfiguration,
 } from './merge_configuration';
+export { applyConversationLearning } from './conversation_learning';
+export {
+  applyBuiltinAiIndexSwitches,
+  builtinAiIndexIds,
+  type BuiltinAiIndexSwitches,
+} from './builtin_ai_indices';
 export type {
   InternalAgentDefinition,
   InternalAgentDefinitionAvailabilityHandler,

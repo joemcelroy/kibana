@@ -87,6 +87,24 @@ describe('RunContext utilities', () => {
   });
 
   describe('forkContextForAgentRun', () => {
+    it('records the agent’s AI indices, so tools can find its memory AI indices', () => {
+      const forkedContext = forkContextForAgentRun({
+        agentId: 'test-agent',
+        conversationId: 'conversation-1',
+        aiIndices: ['elastic', 'user-memories'],
+        parentContext: { runId: 'parent-run-id', stack: [] },
+      });
+
+      expect(forkedContext.stack).toEqual([
+        {
+          type: 'agent',
+          agentId: 'test-agent',
+          conversationId: 'conversation-1',
+          aiIndices: ['elastic', 'user-memories'],
+        },
+      ]);
+    });
+
     it('should fork context and add agent to stack', () => {
       const parentContext: RunContext = {
         runId: 'parent-run-id',

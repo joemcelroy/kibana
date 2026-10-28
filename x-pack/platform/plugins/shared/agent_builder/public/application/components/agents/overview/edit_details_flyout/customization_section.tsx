@@ -23,6 +23,7 @@ import { labels } from '../../../../utils/i18n';
 import { WorkflowPicker } from '../../../tools/form/components/workflow/workflow_picker';
 import { useUiPrivileges } from '../../../../hooks/use_ui_privileges';
 import { AiIndicesSection } from './ai_indices_section';
+import { MemorySection } from './memory_section';
 import type { EditDetailsFormData } from './types';
 
 const { editDetails: flyoutLabels } = labels.agentOverview;
@@ -85,6 +86,8 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
       </EuiPanel>
 
       <AiIndicesSection agentId={agentId} />
+
+      <MemorySection />
 
       {showWorkflowSection && (
         <>

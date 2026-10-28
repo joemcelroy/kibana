@@ -52,18 +52,40 @@ import { registerStepDefinitions } from './step_types';
 import { ContextEngineAnalyticsService, registerContextEngineUsageCollector } from './telemetry';
 import { isContextEngineEnabledInSpace } from './utils/is_context_engine_enabled_in_space';
 import { resolveSpaceId } from './utils/resolve_space_id';
-import { SHORT_TERM_MEMORY_DATA_STREAM, type ShortTermMemory } from '../common/dreaming';
+import {
+  SHORT_TERM_MEMORY_DATA_STREAM,
+  TRANSCRIPTS_DATA_STREAM,
+  type ShortTermMemory,
+  type Transcript,
+} from '../common/dreaming';
 import {
   shortTermMemoryDataStreamDefinition,
   type ShortTermMemoryMappings,
 } from './short_term_memory/storage';
 import { ShortTermMemoryService } from './short_term_memory/service';
+import { transcriptsDataStreamDefinition, type TranscriptMappings } from './transcripts/storage';
+import { TranscriptService } from './transcripts/service';
+import { createDreamingMemoryReader, type DreamingMemoryReader } from './dreaming/memory_reader';
+import { registerMemoryRoutes } from './routes/memory';
+import { createMemoryApi, type MemoryApi } from './memory/api';
 import { DreamingRunProgress } from './dreaming/run_progress';
 import { DreamingService } from './dreaming/service';
 import { createDreamingScheduleService, type DreamingScheduleService } from './dreaming/schedule';
 import { resolveDreamingModel } from './dreaming/model';
 import { forgetMemory } from './dreaming/forget';
+import { registerUserMemoriesAiIndex } from './user_memories';
+import { ownerIdsOf } from './user_memory/owner_ids';
+import {
+  assertMemoryTargets,
+  authorizeMemoryTargets,
+  requestDream,
+  resolveMemoryTargets,
+  resolveRoundTargets,
+} from './dreaming/request_dream';
 import { registerDreamingRoutes } from './routes/dreaming';
+import { registerUserMemoryRoutes } from './routes/user_memory';
+import { forgetRounds } from './user_memory/forget_rounds';
+import { MemorySettingsService } from './user_memory/settings';
 
 /** Must match the `pluginId` on the managed workflow definition. */
 const CONTEXT_ENGINE_WORKFLOW_OWNER = 'contextEngine';
@@ -94,8 +116,11 @@ export class ContextEnginePlugin
   private isFeedbackLoopEnabled: () => Promise<boolean> = async () => false;
   private readonly aiIndexRegistry = new AiIndexRegistry();
   private analyticsService?: ContextEngineAnalyticsService;
-  private shortTermMemoryService?: ShortTermMemoryService;
+  private memoryReader?: DreamingMemoryReader;
+  private memoryApi?: MemoryApi;
+  private forgetRounds?: ContextEnginePluginStart['forgetRounds'];
   private dreamingRunProgress?: DreamingRunProgress;
+  private memorySettings?: MemorySettingsService;
   private dreamingService?: DreamingService;
   private dreamingSchedule?: DreamingScheduleService;
   private workflowsManagementApiPromise: Promise<
@@ -113,6 +138,7 @@ export class ContextEnginePlugin
     registerFeatures({ features: setupDeps.features });
     this.setupWorkflowsManagement(coreSetup);
     coreSetup.dataStreams.registerDataStream(shortTermMemoryDataStreamDefinition);
+    coreSetup.dataStreams.registerDataStream(transcriptsDataStreamDefinition);
 
     this.workflowsManagement = setupDeps.workflowsManagement?.management;
 
@@ -311,17 +337,54 @@ export class ContextEnginePlugin
       }
       return value;
     };
-    const getShortTermMemory = () =>
-      requireStarted(this.shortTermMemoryService, 'Short-term memory service');
+    const getMemoryReader = () => requireStarted(this.memoryReader, 'Dreaming memory reader');
     const getDreamingSchedule = () =>
       requireStarted(this.dreamingSchedule, 'Dreaming schedule service');
+
+    registerUserMemoryRoutes({
+      router,
+      logger: this.logger.get('routes'),
+      getAiIndexService,
+      getAiIndexDataReadService: (params) => {
+        if (!this.createAiIndexDataReadService) {
+          throw new Error('AI index read service not available — plugin has not started');
+        }
+        return this.createAiIndexDataReadService(params);
+      },
+      getSpaces: async () => {
+        const [, startDeps] = await coreSetup.getStartServices();
+        return startDeps.spaces;
+      },
+      forgetRounds: (params) => {
+        if (!this.forgetRounds) {
+          throw new Error('Short-term memory not available — plugin has not started');
+        }
+        return this.forgetRounds(params);
+      },
+      getMemorySettings: () => {
+        if (!this.memorySettings) {
+          throw new Error('Memory settings not available — plugin has not started');
+        }
+        return this.memorySettings;
+      },
+    });
 
     registerDreamingRoutes({
       router,
       logger: this.logger.get('routes'),
       getAiIndexService,
-      getShortTermMemory,
+      getMemoryReader,
       getDreamingSchedule,
+      getSpaces: async () => {
+        const [, startDeps] = await coreSetup.getStartServices();
+        return startDeps.spaces;
+      },
+    });
+
+    registerMemoryRoutes({
+      router,
+      logger: this.logger.get('routes'),
+      getMemoryApi: () => requireStarted(this.memoryApi, 'Memory API'),
       getSpaces: async () => {
         const [, startDeps] = await coreSetup.getStartServices();
         return startDeps.spaces;
@@ -338,7 +401,7 @@ export class ContextEnginePlugin
       verifyKi,
       dreaming: {
         getAiIndexService,
-        getShortTermMemory,
+        getMemoryReader,
         getDreamingService: () => requireStarted(this.dreamingService, 'Dreaming service'),
         getRunProgress: () => requireStarted(this.dreamingRunProgress, 'Dreaming run progress'),
         getDreamingModel: async (request) => {
@@ -373,8 +436,11 @@ export class ContextEnginePlugin
       getFeedbackLoopEnabled: () => this.isFeedbackLoopEnabled(),
     });
 
+    registerUserMemoriesAiIndex(this.aiIndexRegistry);
+
     return {
-      registerAiIndex: (id, properties) => this.aiIndexRegistry.register(id, properties),
+      registerAiIndex: (id, properties, options) =>
+        this.aiIndexRegistry.register(id, properties, options),
     };
   }
 
@@ -431,6 +497,7 @@ export class ContextEnginePlugin
         isManaged: (id) => this.aiIndexRegistry.has(id),
         getManagedIds: () => this.aiIndexRegistry.getManagedIds(),
         getRegistration: (id) => this.aiIndexRegistry.get(id),
+        getDreamingConfig: (id) => this.aiIndexRegistry.getDreamingConfig(id),
         ensure: ensureAiIndex,
       },
     });
@@ -461,6 +528,8 @@ export class ContextEnginePlugin
             (await globalUiSettings.get<boolean>(CONTEXT_ENGINE_MEMORY_ENABLED_SETTING_ID)) ?? false
           );
         },
+        getCurrentUserIds: () =>
+          ownerIdsOf(coreStart.security.authc.getCurrentUser(request) ?? undefined),
       });
     const createAiIndexDataReadService = this.createAiIndexDataReadService;
 
@@ -508,15 +577,47 @@ export class ContextEnginePlugin
           SHORT_TERM_MEMORY_DATA_STREAM
         ),
       esClient: this.esClient,
+      assertTargets: (spaceId, aiIndexIds, memory) =>
+        assertMemoryTargets({
+          aiIndexService,
+          spaceId,
+          aiIndexIds,
+          userId: memory.user_id,
+        }),
     });
-    this.shortTermMemoryService = shortTermMemoryService;
+    const transcriptService = new TranscriptService({
+      getClient: () =>
+        coreStart.dataStreams.initializeClient<TranscriptMappings, Transcript>(
+          TRANSCRIPTS_DATA_STREAM
+        ),
+      esClient: this.esClient,
+      assertTargets: (spaceId, aiIndexIds, transcript) =>
+        assertMemoryTargets({
+          aiIndexService,
+          spaceId,
+          aiIndexIds,
+          userId: transcript.user_id,
+          round: true,
+        }),
+    });
+    const memoryReader = createDreamingMemoryReader({
+      shortTermMemory: shortTermMemoryService,
+      transcripts: transcriptService,
+    });
+    this.memoryReader = memoryReader;
     this.dreamingRunProgress = new DreamingRunProgress({
       esClient: this.esClient,
       logger: dreamingLogger,
     });
+    const memorySettings = new MemorySettingsService({
+      esClient: this.esClient,
+      logger: dreamingLogger,
+    });
+    this.memorySettings = memorySettings;
     this.dreamingService = new DreamingService({
       aiIndexService,
-      shortTermMemory: shortTermMemoryService,
+      memoryReader,
+      transcripts: transcriptService,
       runProgress: this.dreamingRunProgress,
       logger: dreamingLogger,
     });
@@ -534,6 +635,77 @@ export class ContextEnginePlugin
       );
     });
 
+    const forget = (spaceId: string, memoryId: string, request: KibanaRequest) =>
+      forgetMemory({
+        spaceId,
+        memoryId,
+        memoryReader,
+        aiIndexService,
+        esClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
+        logger: dreamingLogger,
+      });
+    const forgetUserRounds: ContextEnginePluginStart['forgetRounds'] = ({
+      spaceId,
+      userId,
+      request,
+    }) =>
+      forgetRounds({
+        transcripts: transcriptService,
+        forget: (space, memoryId) => forget(space, memoryId, request),
+        spaceId,
+        userId,
+      });
+    this.forgetRounds = forgetUserRounds;
+
+    const memoryApi = createMemoryApi({
+      shortTermMemory: shortTermMemoryService,
+      transcripts: transcriptService,
+      getDataRead: (request) =>
+        createAiIndexDataReadService({
+          esClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
+          request,
+        }),
+      resolveMemoryTargets: (spaceId, aiIndexIds) =>
+        resolveMemoryTargets({ aiIndexService, spaceId, aiIndexIds }),
+      authorizeMemoryTargets: (spaceId, aiIndexIds, request) =>
+        authorizeMemoryTargets({
+          aiIndexService,
+          spaceId,
+          aiIndexIds,
+          currentUserClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
+        }),
+      requestDream: ({ spaceId, aiIndexIds, memory, request }) =>
+        requestDream({
+          aiIndexService,
+          dreamingSchedule,
+          spaceId,
+          aiIndexIds,
+          memory,
+          request,
+          currentUserClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
+        }),
+      getCurrentUser: (request) => coreStart.security.authc.getCurrentUser(request) ?? undefined,
+      isMemoryEnabled: async (request) =>
+        (await coreStart.uiSettings
+          .globalAsScopedToClient(coreStart.savedObjects.getScopedClient(request))
+          .get<boolean>(CONTEXT_ENGINE_MEMORY_ENABLED_SETTING_ID)) ?? false,
+      hasPrivilege: async (request, spaceId, privilege) => {
+        const { security } = startDeps;
+        if (!security) {
+          return true;
+        }
+        const action =
+          privilege === 'write'
+            ? apiPrivileges.writeContextEngine
+            : apiPrivileges.readContextEngine;
+        const { hasAllRequested } = await security.authz
+          .checkPrivilegesWithRequest(request)
+          .atSpace(spaceId, { kibana: [security.authz.actions.api.get(action)] });
+        return hasAllRequested;
+      },
+    });
+    this.memoryApi = memoryApi;
+
     return {
       getAiIndexService: () => {
         if (!this.aiIndexService) {
@@ -545,14 +717,33 @@ export class ContextEnginePlugin
       getSignalsService: () => signalsService,
       getImprovementsService: (esClient, spaceId) => createImprovementsService(esClient, spaceId),
       getShortTermMemoryService: () => shortTermMemoryService,
-      forgetMemory: (spaceId, memoryId) =>
-        forgetMemory({
-          spaceId,
-          memoryId,
-          shortTermMemory: shortTermMemoryService,
+      remember: (params) => memoryApi.remember(params),
+      recall: (params) => memoryApi.recall(params),
+      saveTranscript: (params) => memoryApi.saveTranscript(params),
+      forgetMemory: (spaceId, memoryId, request) => forget(spaceId, memoryId, request),
+      forgetRounds: forgetUserRounds,
+      learnsFromConversations: ({ spaceId, userIds }) =>
+        memorySettings.learnsFromConversations(spaceId, userIds),
+      resolveRoundTargets: ({ spaceId, aiIndexIds }) =>
+        resolveRoundTargets({ aiIndexService, spaceId, aiIndexIds }),
+      resolveMemoryTargets: ({ spaceId, aiIndexIds }) =>
+        resolveMemoryTargets({ aiIndexService, spaceId, aiIndexIds }),
+      authorizeMemoryTargets: ({ spaceId, aiIndexIds, request }) =>
+        authorizeMemoryTargets({
           aiIndexService,
-          esClient: coreStart.elasticsearch.client.asInternalUser,
-          logger: dreamingLogger,
+          spaceId,
+          aiIndexIds,
+          currentUserClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
+        }),
+      requestDream: ({ spaceId, aiIndexIds, memory, request }) =>
+        requestDream({
+          aiIndexService,
+          dreamingSchedule,
+          spaceId,
+          aiIndexIds,
+          memory,
+          request,
+          currentUserClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
         }),
     };
   }

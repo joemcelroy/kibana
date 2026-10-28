@@ -82,7 +82,7 @@ describe('forget tool', () => {
   it('forgets a shared memory', async () => {
     const result = await run();
 
-    expect(forgetMemory).toHaveBeenCalledWith('space-1', 'memory-1');
+    expect(forgetMemory).toHaveBeenCalledWith('space-1', 'memory-1', expect.anything());
     expect(result).toEqual({
       results: [{ type: ToolResultType.other, data: { id: 'memory-1', forgotten: true } }],
     });
@@ -93,7 +93,7 @@ describe('forget tool', () => {
 
     await run();
 
-    expect(forgetMemory).toHaveBeenCalledWith('space-1', 'memory-1');
+    expect(forgetMemory).toHaveBeenCalledWith('space-1', 'memory-1', expect.anything());
   });
 
   it('refuses to forget a memory about another user', async () => {

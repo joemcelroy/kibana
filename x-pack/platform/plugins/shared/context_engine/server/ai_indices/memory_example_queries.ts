@@ -24,7 +24,7 @@ const latestActiveRevision = [
 export const buildMemoryExampleQueries = (target: string): MemoryExampleQueries => ({
   crossSession: [
     `FROM ${target} METADATA _id, _index, _score`,
-    `| WHERE type == "memory.session_fact" OR type LIKE "${FACT_TYPE_PATTERN}"`,
+    `| WHERE type == "memory.session" OR type == "memory.session_fact" OR type LIKE "${FACT_TYPE_PATTERN}"`,
     ...latestActiveRevision,
     '| FORK',
     '    ( WHERE content:"<query>" OR title:"<query>" OR description:"<query>" | SORT _score DESC | LIMIT 20 )',

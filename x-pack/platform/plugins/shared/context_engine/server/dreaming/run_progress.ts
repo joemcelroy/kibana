@@ -170,7 +170,8 @@ export class DreamingRunProgress {
     const response = await this.client.search({
       size: MAX_CLEANUP_DOCS,
       track_total_hits: false,
-      _source: false,
+      // The storage adapter rejects hits without a `_source`, so `_source: false` would throw.
+      _source: ['execution_id'],
       query: {
         bool: {
           filter: [{ term: { space: spaceId } }, { term: { ai_index_id: aiIndexId } }],

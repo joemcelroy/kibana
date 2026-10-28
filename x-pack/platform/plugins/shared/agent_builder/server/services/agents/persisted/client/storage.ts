@@ -102,6 +102,8 @@ export interface AgentConfigurationProperties {
   plugin_ids?: string[];
   connector_ids?: string[];
   ai_indices?: string[];
+  enable_elastic_ai_index?: boolean;
+  enable_user_memory?: boolean;
   subagent_ids?: string[];
   approvals?: AgentApprovals;
 }

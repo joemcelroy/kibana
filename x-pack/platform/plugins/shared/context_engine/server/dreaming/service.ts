@@ -6,9 +6,14 @@
  */
 
 import type { Logger } from '@kbn/core/server';
-import type { DreamingRetryEntry, DreamingRunStatus } from '../../common/dreaming';
+import {
+  ROUND_RETENTION_MS,
+  type DreamingRetryEntry,
+  type DreamingRunStatus,
+} from '../../common/dreaming';
 import type { AiIndexService } from '../ai_indices/service';
-import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
+import type { TranscriptServiceApi } from '../transcripts/service';
+import type { DreamingMemoryReader } from './memory_reader';
 import { DreamingRunInProgressError, InvalidDreamingConfigError } from './errors';
 import { planRun, type DreamingTarget } from './plan_run';
 import type { DreamingRunProgress, RunKey } from './run_progress';
@@ -20,6 +25,9 @@ import {
   startRun,
   stateOf,
 } from './state';
+
+/** Recorded rounds past their retention that one run deletes at most. */
+const EXPIRED_ROUNDS_PER_RUN = 500;
 
 export interface StartedDreamingRun {
   tasks: Array<{ task_id: string; group_key: string; count: number }>;
@@ -38,23 +46,27 @@ export interface CommittedDreamingRun {
 /** Starts and ends dreaming runs: claims the AI index, plans the tasks, and commits progress. */
 export class DreamingService {
   private readonly aiIndexService: AiIndexService;
-  private readonly shortTermMemory: ShortTermMemoryServiceApi;
+  private readonly memoryReader: DreamingMemoryReader;
+  private readonly transcripts: Pick<TranscriptServiceApi, 'deleteBefore'>;
   private readonly runProgress: DreamingRunProgress;
   private readonly logger: Logger;
 
   constructor({
     aiIndexService,
-    shortTermMemory,
+    memoryReader,
+    transcripts,
     runProgress,
     logger,
   }: {
     aiIndexService: AiIndexService;
-    shortTermMemory: ShortTermMemoryServiceApi;
+    memoryReader: DreamingMemoryReader;
+    transcripts: Pick<TranscriptServiceApi, 'deleteBefore'>;
     runProgress: DreamingRunProgress;
     logger: Logger;
   }) {
     this.aiIndexService = aiIndexService;
-    this.shortTermMemory = shortTermMemory;
+    this.memoryReader = memoryReader;
+    this.transcripts = transcripts;
     this.runProgress = runProgress;
     this.logger = logger;
   }
@@ -64,7 +76,10 @@ export class DreamingService {
     { target, dryRun, now = new Date() }: { target?: DreamingTarget; dryRun: boolean; now?: Date }
   ): Promise<StartedDreamingRun> {
     const { aiIndexId, spaceId, executionId } = key;
-    const dreaming = await this.aiIndexService.getDreaming(aiIndexId, spaceId);
+    const [dreaming, aiIndex] = await Promise.all([
+      this.aiIndexService.getDreaming(aiIndexId, spaceId),
+      this.aiIndexService.get(aiIndexId, spaceId),
+    ]);
     if (!dreaming?.enabled) {
       throw new InvalidDreamingConfigError(
         `Dreaming is not turned on for AI index '${aiIndexId}'.`
@@ -80,8 +95,10 @@ export class DreamingService {
     });
 
     const plan = await planRun({
-      shortTermMemory: this.shortTermMemory,
+      memoryReader: this.memoryReader,
       spaceId,
+      aiIndexId,
+      userScoped: aiIndex.memory_scope === 'user',
       dreaming,
       target,
       dryRun,
@@ -168,6 +185,7 @@ export class DreamingService {
     if (warning) {
       this.logger.warn(`Dreaming run '${executionId}' for AI index '${aiIndexId}': ${warning}`);
     }
+    await this.expireRounds(spaceId, now);
     return {
       status: warning && status === 'succeeded' ? 'partial' : status,
       tasks: plan.tasks.length,
@@ -175,5 +193,21 @@ export class DreamingService {
       cursor_moved: cursorMoved,
       ...(warning && { warning }),
     };
+  }
+
+  /**
+   * Deletes the space's transcripts past their retention, a batch per run. Never fails the
+   * run: what is left is deleted by a later one.
+   */
+  private async expireRounds(spaceId: string, now: Date): Promise<void> {
+    try {
+      const before = new Date(now.getTime() - ROUND_RETENTION_MS).toISOString();
+      const deleted = await this.transcripts.deleteBefore(spaceId, before, EXPIRED_ROUNDS_PER_RUN);
+      if (deleted > 0) {
+        this.logger.debug(`Deleted ${deleted} transcripts older than ${before} in '${spaceId}'`);
+      }
+    } catch (error) {
+      this.logger.warn(`Could not delete expired transcripts in '${spaceId}': ${error}`);
+    }
   }
 }

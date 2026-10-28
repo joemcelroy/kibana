@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { EuiPanel, EuiSpacer, EuiText, EuiTitle } from '@elastic/eui';
-import { Controller, useFormContext } from 'react-hook-form';
+import { Controller, useController, useFormContext } from 'react-hook-form';
 import { useIsContextEngineEnabled } from '../../../../hooks/use_is_context_engine_enabled';
 import { labels } from '../../../../utils/i18n';
 import { AiIndicesFields, useAiIndices } from '../../ai_indices/ai_indices_fields';
@@ -33,6 +33,10 @@ export const AiIndicesSection: React.FC<AiIndicesSectionProps> = ({ agentId }) =
 const AiIndicesSectionContent: React.FC<AiIndicesSectionProps> = ({ agentId }) => {
   const { control } = useFormContext<EditDetailsFormData>();
   const { availableAiIndices, inheritedIds, warnings, isLoading, error } = useAiIndices(agentId);
+  const { field: elasticAiIndex } = useController({
+    name: 'configuration.enable_elastic_ai_index',
+    control,
+  });
 
   return (
     <>
@@ -58,6 +62,8 @@ const AiIndicesSectionContent: React.FC<AiIndicesSectionProps> = ({ agentId }) =
               error={error}
               isFormDisabled={false}
               onChange={field.onChange}
+              elasticAiIndexEnabled={elasticAiIndex.value}
+              onElasticAiIndexChange={elasticAiIndex.onChange}
             />
           )}
         />

@@ -6,7 +6,11 @@
  */
 
 import { isAllowedBuiltinSkill } from '@kbn/agent-builder-server/allow_lists';
-import { contextEngineAiIndexTools, platformCoreTools } from '@kbn/agent-builder-common/tools';
+import {
+  contextEngineAiIndexTools,
+  contextEngineRecallTools,
+  platformCoreTools,
+} from '@kbn/agent-builder-common/tools';
 import { internalNamespaces } from '@kbn/agent-builder-common/base/namespaces';
 import { contextEngineSkillAvailability } from '../context_engine_skill_availability';
 import {
@@ -58,7 +62,7 @@ describe('analyzeAndImproveSkill', () => {
       platformCoreTools.getIndexMapping,
       contextEngineAiIndexTools.listAiIndices,
       contextEngineAiIndexTools.describeAiIndex,
-      contextEngineAiIndexTools.queryAiIndices,
+      contextEngineRecallTools.recall,
       `${internalNamespaces.workflows}.get_workflow`,
     ]);
   });
@@ -73,7 +77,7 @@ describe('analyzeAndImproveSkill', () => {
 
     expect(content).not.toMatch(/`platform\.core\.execute_esql` samples them/);
     expect(content).toContain(`\`${contextEngineAiIndexTools.listAiIndices}\` lists`);
-    expect(content).toContain(`\`${contextEngineAiIndexTools.queryAiIndices}\` samples them`);
+    expect(content).toContain(`\`${contextEngineRecallTools.recall}\` samples them`);
   });
 
   it('starts trace reading from the queries the attached AI index already carries', () => {
@@ -509,7 +513,7 @@ describe('analyzeAndImproveSkill', () => {
       expect(shapes).toMatch(/adds a new\s+document \(a revision\) carrying the same `id`/);
       expect(shapes).toMatch(/newest document per `id`/);
       expect(shapes).toMatch(/`governance\.lifecycle\.status` is `deleted`/);
-      expect(shapes).toContain('platform.context_engine.query_ai_indices');
+      expect(shapes).toContain('platform.context_engine.recall');
     });
 
     it('makes attributes.esql optional for a KI with no runnable query, never an empty list', () => {
