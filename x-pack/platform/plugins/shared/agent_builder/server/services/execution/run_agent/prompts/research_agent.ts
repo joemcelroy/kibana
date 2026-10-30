@@ -15,7 +15,7 @@ import { attachmentToolsInstructions, renderAttachmentPrompt } from './utils/att
 import { structuredOutputDescription } from './utils/custom_instructions';
 import { getFileSystemInstructions } from './utils/filestore';
 import { getDynamicToolsInstructions } from './utils/dynamic_tools';
-import { getAiIndicesInstructions } from './utils/ai_indices';
+import { getAiIndicesInstructions, getUserMemoryInstructions } from './utils/ai_indices';
 import { getDeploymentInstructions } from './utils/deployment';
 import type { PromptFactoryParams, ResearchAgentPromptRuntimeParams } from './types';
 import { renderRenderersPrompt } from './utils/renderers';
@@ -97,7 +97,7 @@ ${fieldLines}
 };
 
 const getAgentSystemMessage = async ({
-  configuration: { instructions: customInstructions, aiIndexCatalog },
+  configuration: { instructions: customInstructions, aiIndexCatalog, userMemory },
   outputSchema,
   skills,
   spaceId,
@@ -194,6 +194,11 @@ ${getAiIndicesInstructions({
   enabled: experimentalFeatures.aiIndices,
   catalog: aiIndexCatalog ?? [],
   spaceId,
+})}
+
+${getUserMemoryInstructions({
+  enabled: experimentalFeatures.aiIndices,
+  userMemory: userMemory ?? [],
 })}
 
 ## INSTRUCTIONS

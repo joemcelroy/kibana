@@ -85,6 +85,7 @@ import {
 import { registerDreamingRoutes } from './routes/dreaming';
 import { registerUserMemoryRoutes } from './routes/user_memory';
 import { forgetRounds } from './user_memory/forget_rounds';
+import { listOwnMemory } from './user_memory/list_own_memory';
 import { MemorySettingsService } from './user_memory/settings';
 
 /** Must match the `pluginId` on the managed workflow definition. */
@@ -404,6 +405,10 @@ export class ContextEnginePlugin
         getMemoryReader,
         getDreamingService: () => requireStarted(this.dreamingService, 'Dreaming service'),
         getRunProgress: () => requireStarted(this.dreamingRunProgress, 'Dreaming run progress'),
+        getInternalEsClient: async () => {
+          const [coreStart] = await coreSetup.getStartServices();
+          return coreStart.elasticsearch.client.asInternalUser;
+        },
         getDreamingModel: async (request) => {
           const [, { inference, searchInferenceEndpoints }] = await coreSetup.getStartServices();
           return resolveDreamingModel({ request, inference, searchInferenceEndpoints });
@@ -498,6 +503,7 @@ export class ContextEnginePlugin
         getManagedIds: () => this.aiIndexRegistry.getManagedIds(),
         getRegistration: (id) => this.aiIndexRegistry.get(id),
         getDreamingConfig: (id) => this.aiIndexRegistry.getDreamingConfig(id),
+        isHidden: (id) => this.aiIndexRegistry.isHidden(id),
         ensure: ensureAiIndex,
       },
     });
@@ -514,7 +520,7 @@ export class ContextEnginePlugin
       new ImprovementsService({ esClient, logger: improvementsLogger, space: spaceId });
     const createImprovementsService = this.createImprovementsService;
 
-    this.createAiIndexDataReadService = ({ esClient, request }) =>
+    this.createAiIndexDataReadService = ({ esClient, request, includeHidden }) =>
       new AiIndexDataReadService({
         esClient,
         spaceId: resolveSpaceId(startDeps.spaces, request),
@@ -530,6 +536,7 @@ export class ContextEnginePlugin
         },
         getCurrentUserIds: () =>
           ownerIdsOf(coreStart.security.authc.getCurrentUser(request) ?? undefined),
+        includeHidden,
       });
     const createAiIndexDataReadService = this.createAiIndexDataReadService;
 
@@ -642,6 +649,7 @@ export class ContextEnginePlugin
         memoryReader,
         aiIndexService,
         esClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
+        internalEsClient: coreStart.elasticsearch.client.asInternalUser,
         logger: dreamingLogger,
       });
     const forgetUserRounds: ContextEnginePluginStart['forgetRounds'] = ({
@@ -665,6 +673,23 @@ export class ContextEnginePlugin
           esClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
           request,
         }),
+      isHiddenAiIndex: (aiIndexId) => this.aiIndexRegistry.isHidden(aiIndexId),
+      listOwnMemory: ({ spaceId, request, userIds, aiIndexIds }) =>
+        listOwnMemory({
+          aiIndexService,
+          // Per-user AI indices are hidden, in system indices only Kibana reads; the query keeps
+          // to the caller's own KIs.
+          dataRead: createAiIndexDataReadService({
+            esClient: coreStart.elasticsearch.client.asInternalUser,
+            request,
+            includeHidden: true,
+          }),
+          spaceId,
+          userIds,
+          aiIndexIds,
+        }),
+      learnsFromConversations: (spaceId, userIds) =>
+        memorySettings.learnsFromConversations(spaceId, userIds),
       resolveMemoryTargets: (spaceId, aiIndexIds) =>
         resolveMemoryTargets({ aiIndexService, spaceId, aiIndexIds }),
       authorizeMemoryTargets: (spaceId, aiIndexIds, request) =>
@@ -719,6 +744,7 @@ export class ContextEnginePlugin
       getShortTermMemoryService: () => shortTermMemoryService,
       remember: (params) => memoryApi.remember(params),
       recall: (params) => memoryApi.recall(params),
+      getUserMemory: (params) => memoryApi.getUserMemory(params),
       saveTranscript: (params) => memoryApi.saveTranscript(params),
       forgetMemory: (spaceId, memoryId, request) => forget(spaceId, memoryId, request),
       forgetRounds: forgetUserRounds,

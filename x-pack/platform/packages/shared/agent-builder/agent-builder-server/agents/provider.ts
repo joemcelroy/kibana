@@ -52,6 +52,7 @@ import type { AgentBuilderHooks } from '../hooks/types';
 import type { ToolRegistry } from '../tools';
 import type { AgentBuilderAnalytics, AgentBuilderTracking } from '../telemetry';
 import type { AiIndexResolver } from './ai_index_resolver';
+import type { UserMemoryProvider } from './user_memory_provider';
 import type { AgentRegistry } from './registry';
 
 /**
@@ -416,6 +417,11 @@ export interface AgentHandlerContext {
    * non-default AI indices are omitted from the prompt.
    */
   aiIndexResolver?: AiIndexResolver;
+  /**
+   * Provides what the agent knows about the requesting user. Absent when no provider is
+   * registered, in which case the prompt has no user memory section.
+   */
+  userMemoryProvider?: UserMemoryProvider;
 }
 
 /**

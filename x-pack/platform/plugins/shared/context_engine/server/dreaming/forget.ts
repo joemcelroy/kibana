@@ -33,6 +33,7 @@ export const forgetMemory = async ({
   memoryReader,
   aiIndexService,
   esClient,
+  internalEsClient,
   logger,
 }: {
   spaceId: string;
@@ -44,6 +45,8 @@ export const forgetMemory = async ({
    * user cannot write it on every deployment.
    */
   esClient: ElasticsearchClient;
+  /** Writes them in a hidden AI index, whose system index only Kibana can write. */
+  internalEsClient: ElasticsearchClient;
   logger: Logger;
 }): Promise<ForgetMemoryResult> => {
   const [memory] = await memoryReader.getByIds(spaceId, [memoryId]);
@@ -52,10 +55,13 @@ export const forgetMemory = async ({
   }
 
   const affected: string[] = [];
-  for (const { id: aiIndexId, dest, dreaming } of await aiIndexService.listDreaming(spaceId)) {
-    const derived = await findKisDerivedFrom({ esClient, dest, memoryIds: [memoryId] });
+  for (const { id: aiIndexId, dest, dreaming, hidden } of await aiIndexService.listDreaming(
+    spaceId
+  )) {
+    const client = hidden ? internalEsClient : esClient;
+    const derived = await findKisDerivedFrom({ esClient: client, dest, memoryIds: [memoryId] });
     const context = {
-      esClient,
+      esClient: client,
       aiIndexId,
       dest,
       writer: { uri: FORGET_WRITER_URI, metadata: { space_id: spaceId } },

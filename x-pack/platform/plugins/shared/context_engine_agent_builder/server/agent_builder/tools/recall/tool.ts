@@ -51,7 +51,7 @@ const recallSchema = z.object({
     .max(MAX_RECALL_AI_INDICES)
     .optional()
     .describe(
-      "(Optional) For plain words: the AI indices to search, by id, such as user-memories for what is known about the current user. With scope short-term, memories remembered for these AI indices, plus ones remembered for every AI index. In an Agent Builder conversation, omit to search all of the agent's AI indices; outside one, omit to search every AI index you can read. An ES|QL query's FROM names its AI indices instead."
+      "(Optional) For plain words: the AI indices to search, by id. With scope short-term, memories remembered for these AI indices, plus ones remembered for every AI index. In an Agent Builder conversation, omit to search all of the agent's AI indices; outside one, omit to search every AI index you can read. An ES|QL query's FROM names its AI indices instead."
     ),
   params: z
     .record(
@@ -122,7 +122,7 @@ export const createRecallTool = ({
   description: dedent`
     Look up what Context Engine knows about something. Set scope to choose what to search.
     ai-index (the default): the knowledge in AI indices, including long-term memory that was
-    remembered and dreamed, such as what is known about the current user. Plain words get a search
+    remembered and dreamed. Plain words get a search
     by meaning and by words, best matches first, each with the AI index it came from. An ES|QL
     query (starting with FROM) returns its columns and rows: use it for counts, filters and exact
     lookups. Call the describe AI Index tool first for the FROM target, fields and example queries.
@@ -132,10 +132,10 @@ export const createRecallTool = ({
     short-term: memories remembered recently that dreaming has not turned into long-term memory
     yet. Searches their content by meaning. Finds shared memories and ones about the current user,
     never another user's. Use it for what was learned in recent sessions.
-    For plain words, set aiIndexIds to search specific AI indices, such as user-memories for the
-    current user. In an Agent Builder conversation, they must be among the agent's AI indices, and
-    omitting them searches all of them. Each user only recalls their own memories from
-    user-memories.
+    For plain words, set aiIndexIds to search specific AI indices. In an Agent Builder
+    conversation, they must be among the agent's AI indices, and omitting them searches all of
+    them. What is known about the current user is not recalled: an agent that remembers users has
+    it in its instructions.
   `,
   schema: recallSchema,
   // Not esql_results: the UI re-runs those in Discover and Lens without the server's space filter and limit.

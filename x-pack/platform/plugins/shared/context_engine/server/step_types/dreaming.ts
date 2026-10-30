@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import type { KibanaRequest } from '@kbn/core/server';
+import type { ElasticsearchClient, KibanaRequest } from '@kbn/core/server';
 import type { Logger } from '@kbn/logging';
 import { createServerStepDefinition } from '@kbn/workflows-extensions/server';
 import { ExecutionError } from '@kbn/workflows/server';
@@ -40,6 +40,8 @@ export interface DreamingStepDependencies {
   getDreamingService: () => DreamingService;
   getMemoryReader: () => DreamingMemoryReader;
   getRunProgress: () => DreamingRunProgress;
+  /** Writes a hidden AI index, whose backing store is a system index only Kibana writes. */
+  getInternalEsClient: () => Promise<ElasticsearchClient>;
   getDreamingModel: (request: KibanaRequest) => Promise<DreamingModel>;
   isContextEngineEnabled: (spaceId: string) => Promise<boolean>;
   logger: Logger;
@@ -110,6 +112,7 @@ export const getGraphifyStepDefinition = ({
   getAiIndexService,
   getMemoryReader,
   getRunProgress,
+  getInternalEsClient,
   getDreamingModel,
   isContextEngineEnabled,
   logger,
@@ -125,7 +128,7 @@ export const getGraphifyStepDefinition = ({
       const esClient = context.contextManager.getScopedEsClient();
       try {
         const aiIndexService = getAiIndexService();
-        const { dest } = await authorizeDreaming({
+        const { dest, hidden } = await authorizeDreaming({
           aiIndexId,
           spaceId,
           aiIndexService,
@@ -140,7 +143,7 @@ export const getGraphifyStepDefinition = ({
           dest,
           config: dreaming ?? { enabled: false },
           dryRun,
-          esClient,
+          esClient: hidden ? await getInternalEsClient() : esClient,
           memoryReader: getMemoryReader(),
           runProgress: getRunProgress(),
           getModel: () => getDreamingModel(request),

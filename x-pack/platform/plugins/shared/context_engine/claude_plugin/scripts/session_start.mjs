@@ -42,7 +42,7 @@ const instructionsFor = ({ config, sessionId, catalog, targets, learns }) => {
     roundsSection = learns
       ? [
           '',
-          `Each round of this session is saved as a transcript for ${targetList} to dream into the user's own long-term memory. Transcripts are never searched directly.`,
+          `Each round of this session is saved as a transcript for ${targetList} to dream into long-term memory. Transcripts are never searched directly.`,
         ]
       : [
           '',
@@ -60,7 +60,7 @@ const instructionsFor = ({ config, sessionId, catalog, targets, learns }) => {
     ...catalog.map(describeEntry),
     '',
     'Search them before broader retrieval when their KIs may help:',
-    "- `recall` with plain words (a question, or the names involved) runs a search by meaning and by words over the AI indices, best matches first, each with the AI index it came from. Set `ai_index_ids` to narrow it, such as an AI index that keeps each user's memory apart for what is known about the user.",
+    '- `recall` with plain words (a question, or the names involved) runs a search by meaning and by words over the AI indices, best matches first, each with the AI index it came from. Set `ai_index_ids` to narrow it.',
     '- `recall` with `scope: "short-term"` searches memories remembered recently that dreaming has not turned into KIs yet: shared ones and ones about the user. Plain words only.',
     "- `recall` also takes an ES|QL query starting with `FROM <ES|QL target>` for counts, filters, exact lookups or following a KI's references. Call `describe_ai_index` first for its fields, KI types and example queries. The server adds the space filter and a row limit.",
     '- `list_ai_indices` lists the AI indices again if this list is out of date.',

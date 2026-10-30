@@ -7,10 +7,38 @@
 
 import type { Logger } from '@kbn/logging';
 import type { KibanaRequest } from '@kbn/core-http-server';
-import type { AiIndexResolver } from '@kbn/agent-builder-server';
+import type {
+  AiIndexResolver,
+  UserMemoryEntry,
+  UserMemoryProvider,
+} from '@kbn/agent-builder-server';
 import type { AgentConfiguration } from '@kbn/agent-builder-common';
 import type { ResolvedConfiguration } from '../types';
 import { resolveAiIndexCatalog } from './resolve_ai_index_catalog';
+
+/** What the agent knows about the user; nothing when the provider fails, so the run goes on. */
+const resolveUserMemory = async ({
+  aiIndices,
+  request,
+  provider,
+  logger,
+}: {
+  aiIndices: string[];
+  request: KibanaRequest;
+  provider?: UserMemoryProvider;
+  logger?: Logger;
+}): Promise<UserMemoryEntry[]> => {
+  if (!provider || aiIndices.length === 0) {
+    return [];
+  }
+  try {
+    return await provider({ aiIndexIds: aiIndices, request });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger?.warn(`Failed to load user memory, running without it: ${message}`);
+    return [];
+  }
+};
 
 export const resolveConfiguration = async (
   configuration: AgentConfiguration,
@@ -18,11 +46,13 @@ export const resolveConfiguration = async (
     aiIndicesEnabled,
     request,
     resolver,
+    userMemoryProvider,
     logger,
   }: {
     aiIndicesEnabled: boolean;
     request: KibanaRequest;
     resolver?: AiIndexResolver;
+    userMemoryProvider?: UserMemoryProvider;
     logger?: Logger;
   }
 ): Promise<ResolvedConfiguration> => {
@@ -33,13 +63,23 @@ export const resolveConfiguration = async (
 
   if (!aiIndicesEnabled) return base;
 
-  return {
-    ...base,
-    aiIndexCatalog: await resolveAiIndexCatalog({
+  const [aiIndexCatalog, userMemory] = await Promise.all([
+    resolveAiIndexCatalog({
       aiIndices: base.aiIndices,
       request,
       resolver,
       logger,
     }),
+    resolveUserMemory({
+      aiIndices: base.aiIndices,
+      request,
+      provider: userMemoryProvider,
+      logger,
+    }),
+  ]);
+  return {
+    ...base,
+    aiIndexCatalog,
+    ...(userMemory.length > 0 && { userMemory }),
   };
 };

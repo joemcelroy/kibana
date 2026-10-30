@@ -14,11 +14,14 @@ import { AiIndexConflictError } from './errors';
 export interface AiIndexRegistrationOptions {
   /** Dreaming config owned by the plugin; users only turn it on and pick its schedule. */
   dreaming?: ManagedDreamingConfig;
+  /** Keeps the AI index out of AI index lists, queries and recall; the memory APIs still reach it. */
+  hidden?: boolean;
 }
 
 export class AiIndexRegistry {
   private readonly entries = new Map<string, AiIndexProperties>();
   private readonly dreaming = new Map<string, ManagedDreamingConfig>();
+  private readonly hidden = new Set<string>();
   private frozen = false;
 
   register(id: string, properties: AiIndexProperties, options?: AiIndexRegistrationOptions): void {
@@ -31,6 +34,9 @@ export class AiIndexRegistry {
     this.entries.set(id, properties);
     if (options?.dreaming) {
       this.dreaming.set(id, options.dreaming);
+    }
+    if (options?.hidden) {
+      this.hidden.add(id);
     }
   }
 
@@ -54,6 +60,10 @@ export class AiIndexRegistry {
 
   getDreamingConfig(id: string): ManagedDreamingConfig | undefined {
     return this.dreaming.get(id);
+  }
+
+  isHidden(id: string): boolean {
+    return this.hidden.has(id);
   }
 
   /**

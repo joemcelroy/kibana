@@ -170,6 +170,8 @@ export type {
   AgentRegistry,
   AiIndexDetail,
   AiIndexResolver,
+  UserMemoryEntry,
+  UserMemoryProvider,
 } from './agents';
 export type { SkillRegistry } from './skills';
 export type { RendererTypeDefinition } from './renderers';

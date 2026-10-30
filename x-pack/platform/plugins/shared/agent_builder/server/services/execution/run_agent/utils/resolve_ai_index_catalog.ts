@@ -62,6 +62,7 @@ export const resolveAiIndexCatalog = async ({
           ...(resolved.memoryEnabled !== undefined
             ? { memoryEnabled: resolved.memoryEnabled }
             : {}),
+          ...(resolved.hidden ? { hidden: true } : {}),
         }
       : { id };
   });

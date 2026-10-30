@@ -34,11 +34,18 @@ describe('forgetMemory', () => {
   const updateDreamingState = jest.fn();
   const aiIndexService = {
     listDreaming: jest.fn(async () => [
-      { id: 'user-memories', dest: { value: 'ai-index-idx-user-memories' }, dreaming: {} },
+      { id: 'support', dest: { value: 'ai-index-idx-support' }, dreaming: {} },
+      {
+        id: 'user-memories',
+        dest: { value: '.ai-index-idx-user-memories' },
+        dreaming: {},
+        hidden: true,
+      },
     ]),
     updateDreamingState,
   } as unknown as AiIndexService;
   const esClient = {} as ElasticsearchClient;
+  const internalEsClient = {} as ElasticsearchClient;
 
   const run = () =>
     forgetMemory({
@@ -47,6 +54,7 @@ describe('forgetMemory', () => {
       memoryReader,
       aiIndexService,
       esClient,
+      internalEsClient,
       logger: loggingSystemMock.createLogger(),
     });
 
@@ -58,10 +66,13 @@ describe('forgetMemory', () => {
   });
 
   it('marks what was dreamed from the memory stale, queues it, then deletes the memory', async () => {
-    await expect(run()).resolves.toEqual({ forgotten: true, ai_index_ids: ['user-memories'] });
+    await expect(run()).resolves.toEqual({
+      forgotten: true,
+      ai_index_ids: ['support', 'user-memories'],
+    });
 
     expect(mockMarkStale).toHaveBeenCalledWith(
-      expect.objectContaining({ esClient, aiIndexId: 'user-memories' }),
+      expect.objectContaining({ esClient, aiIndexId: 'support' }),
       'u-1/fact-1',
       'round-1'
     );
@@ -69,6 +80,19 @@ describe('forgetMemory', () => {
     expect(forget).toHaveBeenCalledWith('default', 'round-1');
     expect(mockMarkStale.mock.invocationCallOrder[0]).toBeLessThan(
       forget.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("writes a hidden AI index's system index as Kibana", async () => {
+    await run();
+
+    const [userMemories] = mockMarkStale.mock.calls.filter(
+      ([context]) => context.aiIndexId === 'user-memories'
+    );
+    expect(userMemories[0].esClient).toBe(internalEsClient);
+    expect(userMemories[0].esClient).not.toBe(esClient);
+    expect(mockFindKisDerivedFrom).toHaveBeenCalledWith(
+      expect.objectContaining({ esClient: internalEsClient })
     );
   });
 

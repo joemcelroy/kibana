@@ -39,6 +39,15 @@ export const missingIndicesOf = (error: unknown): string[] => {
 export const isAiIndexDest = (index: string, dests: readonly AiIndexDest[]): boolean =>
   dests.some(({ value }) => value.split(',').some((dest) => dest.trim() === index));
 
+/** The `FROM` sources a query names, as written; none when the parser rejects it. */
+export const sourcesOf = (query: string): string[] => {
+  const { root, errors: parseErrors } = Parser.parse(query);
+  if (parseErrors.length > 0) {
+    return [];
+  }
+  return [...mutate.commands.from.sources.list(root)].map(({ name }) => name);
+};
+
 /**
  * The query without the given `FROM` sources, or `undefined` when no source is left. Returns
  * the query unchanged when the parser rejects it or none of the sources are in it.

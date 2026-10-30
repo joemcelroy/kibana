@@ -106,6 +106,11 @@ export interface AiIndexProperties {
 export interface AiIndexHttpItem extends Omit<AiIndexProperties, 'traces'> {
   id: string;
   managed: boolean;
+  /**
+   * Set on a managed AI index kept out of AI index lists, queries and recall, such as
+   * user-memories: only the memory APIs reach it.
+   */
+  hidden?: boolean;
   memory_enabled: boolean;
   date_created: string;
   date_modified: string;

@@ -294,6 +294,9 @@ export class AgentBuilderPlugin
         registerAiIndexResolver: serviceSetups.agents.registerAiIndexResolver.bind(
           serviceSetups.agents
         ),
+        registerUserMemoryProvider: serviceSetups.agents.registerUserMemoryProvider.bind(
+          serviceSetups.agents
+        ),
       },
       attachments: {
         registerType: serviceSetups.attachments.registerType.bind(serviceSetups.attachments),

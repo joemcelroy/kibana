@@ -24,12 +24,17 @@ describe('createMemoryApi', () => {
   const getCurrentUser = jest.fn();
   const isMemoryEnabled = jest.fn();
   const hasPrivilege = jest.fn();
+  const listOwnMemory = jest.fn();
+  const learnsFromConversations = jest.fn();
   let ids: number;
 
   const api = createMemoryApi({
     shortTermMemory: { remember, search },
     transcripts: { save },
     getDataRead: () => ({ list, query } as unknown as ReturnType<MemoryApiDeps['getDataRead']>),
+    isHiddenAiIndex: (aiIndexId) => aiIndexId === 'user-memories',
+    listOwnMemory,
+    learnsFromConversations,
     resolveMemoryTargets,
     authorizeMemoryTargets,
     requestDream,
@@ -66,6 +71,8 @@ describe('createMemoryApi', () => {
     );
     query.mockResolvedValue({ columns: [], values: [] });
     search.mockResolvedValue([]);
+    learnsFromConversations.mockResolvedValue(true);
+    listOwnMemory.mockResolvedValue([]);
   });
 
   describe('remember', () => {
@@ -99,6 +106,7 @@ describe('createMemoryApi', () => {
       const response = await api.remember({
         spaceId,
         request,
+        includeHidden: true,
         input: {
           content: 'Prefers aisle seats.',
           ai_index_ids: ['user-memories', 'user-memories'],
@@ -159,6 +167,12 @@ describe('createMemoryApi', () => {
         { content: 'x', ai_index_ids: ['nope'] },
         InvalidMemoryRequestError,
       ],
+      [
+        'for a hidden AI index, outside an Agent Builder agent',
+        () => {},
+        { content: 'x', ai_index_ids: ['support-insights', 'user-memories'] },
+        InvalidMemoryRequestError,
+      ],
     ])('refuses to remember %s', async (_, arrange, input, error) => {
       arrange();
 
@@ -198,13 +212,24 @@ describe('createMemoryApi', () => {
         api.recall({
           spaceId,
           request,
-          input: { query: 'which seat?', ai_index_ids: ['user-memories'] },
+          input: { query: 'which seat?', ai_index_ids: ['support-insights'] },
         })
       ).resolves.toEqual({ scope: 'ai-index', query_type: 'text', results: [] });
       expect(query).toHaveBeenCalledTimes(1);
       expect(query.mock.calls[0][0]).toEqual(
         expect.objectContaining({ params: { query: 'which seat?' }, limit: 10 })
       );
+    });
+
+    it('leaves hidden AI indices out, without an error for them', async () => {
+      await expect(
+        api.recall({
+          spaceId,
+          request,
+          input: { query: 'which seat?', ai_index_ids: ['support-insights', 'user-memories'] },
+        })
+      ).resolves.toEqual({ scope: 'ai-index', query_type: 'text', results: [] });
+      expect(list).toHaveBeenCalledWith(['support-insights']);
     });
 
     it('searches short-term memory as the caller', async () => {
@@ -270,6 +295,43 @@ describe('createMemoryApi', () => {
     });
   });
 
+  describe('getUserMemory', () => {
+    const input = { ai_index_ids: ['support-insights', 'user-memories', 'user-memories'] };
+    const memory = [{ id: 'user-memories', memory_scope: 'user', kis: [] }];
+
+    it("lists the caller's KIs in the AI indices that keep each user's memory apart", async () => {
+      listOwnMemory.mockResolvedValue(memory);
+
+      await expect(api.getUserMemory({ spaceId, request, input })).resolves.toBe(memory);
+      expect(learnsFromConversations).toHaveBeenCalledWith(spaceId, ['u_jdoe', 'jdoe']);
+      expect(listOwnMemory).toHaveBeenCalledWith({
+        spaceId,
+        request,
+        userIds: ['u_jdoe', 'jdoe'],
+        aiIndexIds: ['user-memories'],
+      });
+    });
+
+    it.each([
+      ['without the read privilege', () => hasPrivilege.mockResolvedValue(false)],
+      ['with memory off', () => isMemoryEnabled.mockResolvedValue(false)],
+      ['when the user turned learning off', () => learnsFromConversations.mockResolvedValue(false)],
+      ['without an identity', () => getCurrentUser.mockReturnValue(undefined)],
+    ])('gives nothing %s', async (_, arrange) => {
+      arrange();
+
+      await expect(api.getUserMemory({ spaceId, request, input })).resolves.toEqual([]);
+      expect(listOwnMemory).not.toHaveBeenCalled();
+    });
+
+    it('gives nothing for shared AI indices only', async () => {
+      await expect(
+        api.getUserMemory({ spaceId, request, input: { ai_index_ids: ['support-insights'] } })
+      ).resolves.toEqual([]);
+      expect(listOwnMemory).not.toHaveBeenCalled();
+    });
+  });
+
   describe('saveTranscript', () => {
     const input = {
       session_id: 'conv-1',
@@ -278,7 +340,9 @@ describe('createMemoryApi', () => {
     };
 
     it('saves a transcript about the caller, under a generated id', async () => {
-      await expect(api.saveTranscript({ spaceId, request, input })).resolves.toEqual({
+      await expect(
+        api.saveTranscript({ spaceId, request, input, includeHidden: true })
+      ).resolves.toEqual({
         id: 'transcript-id-1',
         ai_index_ids: ['user-memories'],
       });
@@ -296,11 +360,31 @@ describe('createMemoryApi', () => {
     it('records the username for a caller without a profile', async () => {
       getCurrentUser.mockReturnValue({ username: 'jdoe' });
 
-      await api.saveTranscript({ spaceId, request, input: { ...input, id: 'round-1' } });
+      await api.saveTranscript({
+        spaceId,
+        request,
+        input: { ...input, id: 'round-1' },
+        includeHidden: true,
+      });
 
       expect(save.mock.calls[0][1]).toEqual(
         expect.objectContaining({ id: 'round-1', user_id: 'jdoe' })
       );
+    });
+
+    it('refuses a hidden AI index, outside an Agent Builder agent', async () => {
+      await expect(api.saveTranscript({ spaceId, request, input })).rejects.toThrow(
+        "'user-memories' only takes memories from Agent Builder agents that remember users."
+      );
+      await expect(
+        api.saveTranscript({
+          spaceId,
+          request,
+          input: { ...input, ai_index_ids: ['support-insights'] },
+        })
+      ).resolves.toEqual(expect.objectContaining({ ai_index_ids: ['support-insights'] }));
+      expect(authorizeMemoryTargets).toHaveBeenCalledTimes(1);
+      expect(save).toHaveBeenCalledTimes(1);
     });
 
     it('refuses with memory off, and without an identity', async () => {
@@ -310,9 +394,9 @@ describe('createMemoryApi', () => {
       );
 
       getCurrentUser.mockReturnValue(undefined);
-      await expect(api.saveTranscript({ spaceId, request, input })).rejects.toBeInstanceOf(
-        MemoryAccessDeniedError
-      );
+      await expect(
+        api.saveTranscript({ spaceId, request, input, includeHidden: true })
+      ).rejects.toBeInstanceOf(MemoryAccessDeniedError);
       expect(save).not.toHaveBeenCalled();
     });
   });

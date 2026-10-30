@@ -88,9 +88,12 @@ export const registerUserMemoryRoutes = ({
           const body: ListOwnMemoryResponse = {
             ai_indices: await listOwnMemory({
               aiIndexService: getAiIndexService(),
+              // Per-user AI indices are hidden, in system indices only Kibana reads; the query keeps
+              // to the caller's own KIs.
               dataRead: getAiIndexDataReadService({
-                esClient: core.elasticsearch.client.asCurrentUser,
+                esClient: core.elasticsearch.client.asInternalUser,
                 request,
+                includeHidden: true,
               }),
               spaceId: resolveSpaceId(await getSpaces(), request),
               userIds,

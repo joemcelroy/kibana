@@ -142,6 +142,8 @@ export const captureRound = async (
     await contextEngine.saveTranscript({
       spaceId,
       request,
+      // The targets are the agent's, user-memories among them when the agent remembers users.
+      includeHidden: true,
       // Saved as the owner, who is the request's user: see `isOwner` above.
       input: {
         id: `round-${round.id}`,

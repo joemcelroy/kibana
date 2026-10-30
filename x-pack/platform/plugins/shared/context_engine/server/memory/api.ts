@@ -20,6 +20,7 @@ import {
   type SaveTranscriptRequest,
   type SaveTranscriptResponse,
 } from '../../common/http_api/memory';
+import type { OwnMemoryAiIndex } from '../../common/http_api/user_memory';
 import type { AiIndexDataReadServiceApi } from '../ai_indices/data_read_service';
 import type { DreamRequestResult, MemoryTarget } from '../dreaming/request_dream';
 import type { ShortTermMemoryServiceApi } from '../short_term_memory/service';
@@ -39,6 +40,17 @@ export interface MemoryApiDeps {
   transcripts: Pick<TranscriptServiceApi, 'save'>;
   /** Reads AI indices as the request's user, with the space, lifecycle and per-user filters. */
   getDataRead: (request: KibanaRequest) => AiIndexDataReadServiceApi;
+  /** Whether a plugin registered the AI index as hidden; recall leaves those out. */
+  isHiddenAiIndex: (aiIndexId: string) => boolean;
+  /** The caller's KIs in the given AI indices, hidden ones included. */
+  listOwnMemory: (params: {
+    spaceId: string;
+    request: KibanaRequest;
+    userIds: readonly string[];
+    aiIndexIds: readonly string[];
+  }) => Promise<OwnMemoryAiIndex[]>;
+  /** Whether none of `userIds` turned off learning from their conversations. */
+  learnsFromConversations: (spaceId: string, userIds: readonly string[]) => Promise<boolean>;
   /** The AI indices among `aiIndexIds` that take memories; unknown ones are left out. */
   resolveMemoryTargets: (spaceId: string, aiIndexIds: readonly string[]) => Promise<MemoryTarget[]>;
   /** Throws unless the request's user may write each AI index's backing store. */
@@ -69,6 +81,11 @@ interface MemoryCall<Input> {
   spaceId: string;
   request: KibanaRequest;
   input: Input;
+  /**
+   * Lets a hidden AI index, such as user-memories, be a target. Only Agent Builder sets it, for a
+   * conversation with an agent that remembers users; the routes and other clients never do.
+   */
+  includeHidden?: boolean;
 }
 
 /**
@@ -79,19 +96,26 @@ export interface MemoryApi {
   /**
    * Appends a short-term memory. Needs the Context Engine write privilege and memory on. Records
    * the caller as its user when it is about them, or when an AI index it is for keeps each user's
-   * memory apart.
+   * memory apart. A hidden AI index is a target only with `includeHidden`.
    */
   remember(call: MemoryCall<RememberRequest>): Promise<RememberResponse>;
   /**
    * Searches AI indices (`scope: 'ai-index'`), by plain words or with an ES|QL query, or
    * short-term memory (`scope: 'short-term'`), by plain words. Needs the Context Engine read
-   * privilege, and memory on for short-term memory. Transcripts are never searched.
+   * privilege, and memory on for short-term memory. Transcripts and hidden AI indices, such as
+   * user-memories, are never searched.
    */
   recall(call: MemoryCall<RecallRequest>): Promise<RecallResponse>;
   /**
+   * What the AI indices among `ai_index_ids` that keep each user's memory apart know about the
+   * caller, such as user-memories, for an agent to have in its prompt. Empty without the read
+   * privilege, with memory off, or when the caller turned off learning from their conversations.
+   */
+  getUserMemory(call: MemoryCall<{ ai_index_ids: readonly string[] }>): Promise<OwnMemoryAiIndex[]>;
+  /**
    * Saves the transcript of one of the caller's conversation rounds, apart from short-term memory,
    * for the AI indices it names to dream. Each must have memory and dreaming on, without
-   * `rounds: false`.
+   * `rounds: false`. A hidden AI index is a target only with `includeHidden`.
    */
   saveTranscript(call: MemoryCall<SaveTranscriptRequest>): Promise<SaveTranscriptResponse>;
 }
@@ -105,10 +129,29 @@ const recordedUserIdOf = (user: CurrentUser | undefined): string => {
   return userId;
 };
 
+/** Refuses hidden AI indices as targets, unless the call comes from an Agent Builder agent. */
+const assertVisibleTargets = (
+  aiIndexIds: readonly string[],
+  isHiddenAiIndex: (aiIndexId: string) => boolean,
+  includeHidden: boolean | undefined
+): void => {
+  const hidden = includeHidden ? [] : aiIndexIds.filter(isHiddenAiIndex);
+  if (hidden.length > 0) {
+    throw new InvalidMemoryRequestError(
+      `${hidden
+        .map((id) => `'${id}'`)
+        .join(', ')} only takes memories from Agent Builder agents that remember users.`
+    );
+  }
+};
+
 export const createMemoryApi = ({
   shortTermMemory,
   transcripts,
   getDataRead,
+  isHiddenAiIndex,
+  listOwnMemory,
+  learnsFromConversations,
   resolveMemoryTargets,
   authorizeMemoryTargets,
   requestDream,
@@ -134,10 +177,11 @@ export const createMemoryApi = ({
   };
 
   return {
-    async remember({ spaceId, request, input }) {
+    async remember({ spaceId, request, input, includeHidden }) {
       await assertPrivilege(request, spaceId, 'write');
       await assertMemoryEnabled(request);
       const aiIndexIds = [...new Set(input.ai_index_ids ?? [])];
+      assertVisibleTargets(aiIndexIds, isHiddenAiIndex, includeHidden);
       if (input.dream_now && aiIndexIds.length === 0) {
         throw new InvalidMemoryRequestError(
           'dream_now needs an AI index to dream in: set ai_index_ids.'
@@ -196,6 +240,8 @@ export const createMemoryApi = ({
       const scope = input.scope ?? DEFAULT_RECALL_SCOPE;
       const esql = isEsqlQuery(input.query);
       const dataRead = getDataRead(request);
+      // An agent passes all of its AI indices, so a hidden one is dropped rather than refused.
+      const aiIndexIds = input.ai_index_ids?.filter((id) => !isHiddenAiIndex(id));
 
       if (esql) {
         if (scope === 'short-term') {
@@ -239,7 +285,7 @@ export const createMemoryApi = ({
           spaceId,
           userIds: ownerIdsOf(getCurrentUser(request)),
           query: input.query,
-          aiIndexIds: input.ai_index_ids,
+          aiIndexIds,
           limit,
         });
         return { scope, query_type: 'text', results, ...(errors.length > 0 && { errors }) };
@@ -247,16 +293,32 @@ export const createMemoryApi = ({
       const { results, errors } = await searchAiIndices({
         dataRead,
         query: input.query,
-        aiIndexIds: input.ai_index_ids,
+        aiIndexIds,
         limit,
       });
       return { scope, query_type: 'text', results, ...(errors.length > 0 && { errors }) };
     },
 
-    async saveTranscript({ spaceId, request, input }) {
+    async getUserMemory({ spaceId, request, input }) {
+      if (!(await hasPrivilege(request, spaceId, 'read')) || !(await isMemoryEnabled(request))) {
+        return [];
+      }
+      const userIds = ownerIdsOf(getCurrentUser(request));
+      if (userIds.length === 0 || !(await learnsFromConversations(spaceId, userIds))) {
+        return [];
+      }
+      const targets = await resolveMemoryTargets(spaceId, [...new Set(input.ai_index_ids)]);
+      const aiIndexIds = targets
+        .filter(({ memoryScope }) => memoryScope === 'user')
+        .map(({ aiIndexId }) => aiIndexId);
+      return aiIndexIds.length > 0 ? listOwnMemory({ spaceId, request, userIds, aiIndexIds }) : [];
+    },
+
+    async saveTranscript({ spaceId, request, input, includeHidden }) {
       await assertPrivilege(request, spaceId, 'read');
       await assertMemoryEnabled(request);
       const aiIndexIds = [...new Set(input.ai_index_ids)];
+      assertVisibleTargets(aiIndexIds, isHiddenAiIndex, includeHidden);
       await authorizeMemoryTargets(spaceId, aiIndexIds, request);
       const id = input.id ?? `transcript-${generateId()}`;
       await transcripts.save(spaceId, {

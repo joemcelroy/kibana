@@ -82,5 +82,6 @@ export const createAgentsServiceStartMock = (): AgentsServiceStartMock => {
     removeSkillRefsFromAgents: jest.fn(),
     getAgentsUsingSkills: jest.fn(),
     getAiIndexResolver: jest.fn().mockReturnValue(undefined),
+    getUserMemoryProvider: jest.fn().mockReturnValue(undefined),
   };
 };

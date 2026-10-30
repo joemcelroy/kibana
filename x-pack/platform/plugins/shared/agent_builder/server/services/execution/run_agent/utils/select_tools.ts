@@ -87,9 +87,10 @@ export const selectTools = async ({
   // Memory tools have no skill of their own, so they stay static.
   const hasMemoryEnabledAiIndex =
     aiIndexCatalog?.some(({ memoryEnabled }) => memoryEnabled) ?? false;
-  // Recall reads any AI index, so it only needs one the agent can resolve.
+  // Recall reads any AI index, so it only needs one the agent can resolve. A hidden one, such as
+  // user-memories, is in the prompt instead.
   const hasResolvedAiIndex =
-    aiIndexCatalog?.some(({ esqlTarget }) => esqlTarget !== undefined) ?? false;
+    aiIndexCatalog?.some(({ esqlTarget, hidden }) => esqlTarget !== undefined && !hidden) ?? false;
 
   // pick tools from provider (from agent config and attachment-type tools)
   const staticRegistryTools = await pickTools({

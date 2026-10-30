@@ -18,17 +18,18 @@ export const aiIndexPath = (aiIndexId, suffix = '') =>
   `${AI_INDEX_PATH}/${encodeURIComponent(aiIndexId)}${suffix}`;
 
 /**
- * Whether an AI index takes recorded rounds: memory on, per user, dreaming on with rounds. The
- * same check as Context Engine's `resolveRoundTargets`: a round shows what its user can read, so
- * it never goes to an AI index others read.
+ * Whether an AI index takes recorded rounds: memory on, dreaming on, rounds not turned off. The
+ * same check as Context Engine's `resolveRoundTargets`. Only the AI indices the user can list
+ * are asked, so user-memories, which is hidden and filled only by Agent Builder conversations,
+ * never gets this session's rounds.
  */
 const takesRounds = async (client, aiIndex) => {
-  if (!aiIndex.memory_enabled || aiIndex.memory_scope !== 'user') {
+  if (!aiIndex.memory_enabled) {
     return false;
   }
   try {
     const { dreaming } = await client.get(aiIndexPath(aiIndex.id, '/_dreaming'));
-    return dreaming?.enabled === true && dreaming.rounds === true;
+    return dreaming?.enabled === true && dreaming.rounds !== false;
   } catch {
     return false;
   }

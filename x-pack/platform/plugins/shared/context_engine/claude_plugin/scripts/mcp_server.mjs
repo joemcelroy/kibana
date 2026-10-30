@@ -90,7 +90,7 @@ const TOOLS = [
         about_user: {
           type: 'boolean',
           description:
-            'True when the memory is about the current user, such as their preferences or role, so it is kept in their own long-term memory. Omit for knowledge useful to anyone in this space.',
+            'True when the memory is about the current user, such as their preferences or role, so it is recorded as theirs in the AI indices it goes to. Those are AI indices others can read: the private user memory is filled only by Agent Builder conversations. Omit for knowledge useful to anyone in this space.',
         },
         ai_index_ids: aiIndexIdsSchema(
           'The AI indices whose long-term memory this belongs in, by id; each must take memories. Omit to let every AI index with dreaming on use it.'

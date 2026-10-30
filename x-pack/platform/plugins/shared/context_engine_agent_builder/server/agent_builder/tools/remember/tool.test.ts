@@ -107,6 +107,7 @@ describe('remember tool', () => {
     expect(remember).toHaveBeenCalledWith({
       spaceId: 'space-1',
       request: context.request,
+      includeHidden: false,
       input: { content: params.content, session_id: 'conversation-1' },
     });
     expect(result).toEqual({
@@ -147,6 +148,15 @@ describe('remember tool', () => {
     remember.mockClear();
     await run({ ...params, sessionId: 'mcp-session' }, null, 'mcp');
     expect(rememberedWith()).toEqual(expect.objectContaining({ session_id: 'mcp-session' }));
+  });
+
+  it('lets only a conversation with an agent target hidden AI indices', async () => {
+    await run(params, null, 'mcp');
+    expect(remember.mock.calls[0][0].includeHidden).toBe(false);
+
+    remember.mockClear();
+    await run(params, 'conversation-1', undefined, ['support-insights', 'user-memories']);
+    expect(remember.mock.calls[0][0].includeHidden).toBe(true);
   });
 
   it('reports a refusal from Context Engine as an error result', async () => {

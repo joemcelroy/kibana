@@ -40,6 +40,7 @@ export type {
 } from './builtin_definition';
 export type { AgentTypeDefinition, AgentTypeRegistry } from './type_definition';
 export type { AiIndexDetail, AiIndexResolver } from './ai_index_resolver';
+export type { UserMemoryEntry, UserMemoryProvider } from './user_memory_provider';
 export {
   mergeAgentConfiguration,
   ADMIN_INSTRUCTIONS_HEADER,

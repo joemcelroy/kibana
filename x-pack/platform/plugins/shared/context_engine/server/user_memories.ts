@@ -83,8 +83,12 @@ export const USER_MEMORIES_DREAMING: ManagedDreamingConfig = {
   ],
 };
 
-/** Registers the user memories AI index that every space gets. */
+/**
+ * Registers the user memories AI index that every space gets. It is hidden: agents get what it
+ * knows about the user in their prompt rather than by recalling it.
+ */
 export const registerUserMemoriesAiIndex = (registry: AiIndexRegistry): void =>
   registry.register(USER_MEMORIES_AI_INDEX_ID, USER_MEMORIES_AI_INDEX, {
     dreaming: USER_MEMORIES_DREAMING,
+    hidden: true,
   });

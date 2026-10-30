@@ -13,7 +13,9 @@ import { DreamingForbiddenError, InvalidDreamingConfigError } from './errors';
 /**
  * Checks that the caller may dream for an AI index: memory is enabled on it and the caller can
  * write to its backing store. Reading short-term memory is only allowed after this passes,
- * because that read runs as the internal user.
+ * because that read runs as the internal user. A hidden AI index's backing store is a system index
+ * only Kibana writes, so the caller's Context Engine privileges, checked by the route or step, are
+ * all it needs.
  */
 export const authorizeDreaming = async ({
   aiIndexId,
@@ -31,6 +33,9 @@ export const authorizeDreaming = async ({
     throw new InvalidDreamingConfigError(
       `AI index '${aiIndexId}' does not have memory enabled, so it cannot dream.`
     );
+  }
+  if (aiIndex.hidden) {
+    return aiIndex;
   }
   const { has_all_requested: hasAllRequested } = await currentUserClient.security.hasPrivileges({
     index: [{ names: [aiIndex.dest.value], privileges: ['write'] }],

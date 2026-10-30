@@ -101,6 +101,7 @@ describe('captureRound', () => {
     expect(saveTranscript).toHaveBeenCalledWith({
       spaceId: 'default',
       request,
+      includeHidden: true,
       input: {
         id: 'round-round-1',
         session_id: 'conv-1',

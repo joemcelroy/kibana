@@ -27,6 +27,7 @@ import type {
   AgentRegistry,
   AgentAvailabilityConfig,
   AiIndexResolver,
+  UserMemoryProvider,
 } from './agents';
 import type { RunToolFn, ModelProvider } from './runner';
 import type { RunAgentFn } from './agents';
@@ -152,6 +153,11 @@ export interface AgentsSetup {
    * agent configurations.
    */
   registerAiIndexResolver: (resolver: AiIndexResolver) => void;
+  /**
+   * Register the provider of what an agent knows about the requesting user, given to agents that
+   * remember users in their prompt.
+   */
+  registerUserMemoryProvider: (provider: UserMemoryProvider) => void;
 }
 
 export interface AgentsStart {

@@ -121,6 +121,8 @@ export interface AiIndexManagedBootstrap {
   getRegistration: (id: string) => AiIndexProperties | undefined;
   /** The dreaming config a plugin registered with a managed AI index, if any. */
   getDreamingConfig?: (id: string) => ManagedDreamingConfig | undefined;
+  /** Whether a plugin registered the managed AI index as hidden. */
+  isHidden?: (id: string) => boolean;
   ensure: (id: string, spaceId: string) => Promise<boolean>;
 }
 
@@ -474,7 +476,9 @@ export class AiIndexService {
   /** The space's AI indices that have dreaming turned on, with their resolved dest. */
   async listDreaming(
     spaceId: string
-  ): Promise<Array<{ id: string; dest: AiIndexDest; dreaming: AiIndexDreaming }>> {
+  ): Promise<
+    Array<{ id: string; dest: AiIndexDest; dreaming: AiIndexDreaming; hidden?: boolean }>
+  > {
     const response = await this.storageClient.search({
       size: MAX_AI_INDICES,
       track_total_hits: false,
@@ -500,6 +504,7 @@ export class AiIndexService {
           id: document.id,
           dest: registration?.dest ?? document.dest,
           dreaming,
+          ...(registration && this.managedBootstrap?.isHidden?.(document.id) && { hidden: true }),
         },
       ];
     });
@@ -656,7 +661,11 @@ export class AiIndexService {
     const registration = document.managed
       ? this.managedBootstrap?.getRegistration(document.id)
       : undefined;
-    return toAiIndexItem(registration ? mergeManagedAiIndex(registration, document) : document);
+    if (!registration) {
+      return toAiIndexItem(document);
+    }
+    const item = toAiIndexItem(mergeManagedAiIndex(registration, document));
+    return this.managedBootstrap?.isHidden?.(document.id) ? { ...item, hidden: true } : item;
   }
 
   private async findDocument(

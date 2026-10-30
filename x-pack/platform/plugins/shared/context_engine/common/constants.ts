@@ -179,4 +179,8 @@ export const buildAgentBuilderTracesIndexName = (spaceId: string): string =>
  * Agent Builder gives it to every agent unless the agent switches user memory off.
  */
 export const USER_MEMORIES_AI_INDEX_ID = agentBuilderUserMemoriesAiIndexId;
-export const USER_MEMORIES_AI_INDEX_DEST = 'ai-index-idx-user-memories';
+/**
+ * A system index: users cannot query it directly. Kibana reads and writes it, and each user only
+ * reaches their own memories, through the memory APIs and their agents' prompts.
+ */
+export const USER_MEMORIES_AI_INDEX_DEST = '.ai-index-idx-user-memories';

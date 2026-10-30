@@ -5,6 +5,8 @@
  * 2.0.
  */
 
+import type { UserMemoryEntry } from '@kbn/agent-builder-server';
+
 /**
  * A single AI index entry rendered in the system prompt's AI INDICES catalog.
  */
@@ -19,6 +21,8 @@ export interface AiIndexCatalogEntry {
   description?: string;
   /** Whether this resolved AI Index accepts memory writes. */
   memoryEnabled?: boolean;
+  /** Left out of the catalog listing and of recall; it still takes memories. */
+  hidden?: boolean;
 }
 
 export interface ResolvedConfiguration {
@@ -27,4 +31,9 @@ export interface ResolvedConfiguration {
   aiIndices: string[];
   /** Rendered AI index catalog, in config order. Absent when the AI indices feature is off. */
   aiIndexCatalog?: AiIndexCatalogEntry[];
+  /**
+   * What the agent knows about the requesting user, newest first. Absent when the AI indices
+   * feature is off, no provider is registered, or there is nothing to give.
+   */
+  userMemory?: UserMemoryEntry[];
 }

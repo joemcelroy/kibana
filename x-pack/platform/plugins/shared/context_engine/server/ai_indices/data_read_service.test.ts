@@ -272,4 +272,63 @@ describe('AiIndexDataReadService', () => {
       );
     });
   });
+
+  describe('a hidden AI index', () => {
+    const userMemories: AiIndexHttpItem = {
+      ...aiIndex,
+      id: 'user-memories',
+      dest: { type: 'index', value: '.ai-index-idx-user-memories' },
+      managed: true,
+      memory_scope: 'user',
+      hidden: true,
+    };
+    const withHidden = new AiIndexDataReadService({
+      esClient,
+      spaceId: 'marketing',
+      auditLogger,
+      aiIndexService,
+      logger,
+      isMemoryEnabled,
+      includeHidden: true,
+    });
+
+    beforeEach(() => {
+      aiIndexService.list.mockResolvedValue([aiIndex, userMemories]);
+      filterReadableAiIndicesMock.mockImplementation(async ({ aiIndices }) => aiIndices);
+    });
+
+    it('is left out of the list', async () => {
+      await expect(service.list()).resolves.toEqual([aiIndex]);
+      await expect(service.list(['user-memories'])).resolves.toEqual([]);
+    });
+
+    it('is listed without probing when the service includes hidden ones', async () => {
+      await expect(withHidden.list()).resolves.toEqual([aiIndex, userMemories]);
+      expect(filterReadableAiIndicesMock).toHaveBeenCalledWith(
+        expect.objectContaining({ aiIndices: [aiIndex] })
+      );
+    });
+
+    it('cannot be named in a query', async () => {
+      await expect(
+        service.query({ query: 'FROM ai-index-idx-support, .ai-index-idx-user-memories' })
+      ).rejects.toThrow("AI index 'user-memories' cannot be queried.");
+      expect(esqlQuery).not.toHaveBeenCalled();
+    });
+
+    it('can be queried when the service includes hidden ones', async () => {
+      esqlQuery.mockResolvedValue({ columns: [], values: [] });
+
+      await withHidden.query({ query: 'FROM .ai-index-idx-user-memories' });
+
+      expect(esqlQuery).toHaveBeenCalled();
+    });
+
+    it('cannot be described', async () => {
+      aiIndexService.get.mockResolvedValue(userMemories);
+
+      await expect(service.describe('user-memories')).rejects.toThrow(AiIndexNotFoundError);
+      expect(describeAiIndexMock).not.toHaveBeenCalled();
+    });
+  });
 });

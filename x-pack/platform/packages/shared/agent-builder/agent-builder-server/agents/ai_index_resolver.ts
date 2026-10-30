@@ -18,6 +18,11 @@ export interface AiIndexDetail {
   description?: string;
   /** Whether this AI Index accepts memory writes. Absent entries fail closed for memory tools. */
   memoryEnabled?: boolean;
+  /**
+   * Kept out of the prompt's AI index catalog and out of recall, such as `user-memories`: what it
+   * knows reaches the agent through the user memory provider instead. It still takes memories.
+   */
+  hidden?: boolean;
 }
 
 /**

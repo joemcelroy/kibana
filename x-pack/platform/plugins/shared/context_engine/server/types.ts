@@ -47,6 +47,8 @@ export interface GetAiIndexDataReadServiceParams {
   esClient: ElasticsearchClient;
   /** Space and audit scope are resolved from this request. */
   request: KibanaRequest;
+  /** Reads hidden AI indices too, such as user-memories. For the memory APIs only. */
+  includeHidden?: boolean;
 }
 
 export interface ContextEnginePluginStart {
@@ -69,6 +71,11 @@ export interface ContextEnginePluginStart {
   remember: MemoryApi['remember'];
   /** Searches AI indices or short-term memory as the request's user. See {@link MemoryApi.recall}. */
   recall: MemoryApi['recall'];
+  /**
+   * What the request's user's per-user memory holds about them, for an agent's prompt. See
+   * {@link MemoryApi.getUserMemory}.
+   */
+  getUserMemory: MemoryApi['getUserMemory'];
   /**
    * Saves the transcript of the request's user's conversation round, apart from short-term memory.
    * See {@link MemoryApi.saveTranscript}. Throws `TranscriptExistsError` when its id is taken.

@@ -7,7 +7,11 @@
 
 import type { CoreSetup } from '@kbn/core/server';
 import type { KibanaRequest } from '@kbn/core-http-server';
-import type { AgentBuilderPluginSetup, AiIndexResolver } from '@kbn/agent-builder-server';
+import type {
+  AgentBuilderPluginSetup,
+  AiIndexResolver,
+  UserMemoryProvider,
+} from '@kbn/agent-builder-server';
 import { registerContextEngineAgentBuilderIntegration } from './register_agent_builder_integration';
 import { CONTEXT_ENGINE_SETUP_AGENT_ID } from './agent/context_engine_agent';
 import { chatAgentTypeId } from '@kbn/agent-builder-common';
@@ -55,14 +59,17 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
 
     const list = jest.fn().mockResolvedValue(aiIndices);
     const getAiIndexDataReadService = jest.fn().mockReturnValue({ list });
+    const getUserMemory = jest.fn().mockResolvedValue([]);
+    const getSpaceId = jest.fn().mockReturnValue('marketing');
     const asCurrentUser = {};
     const asScoped = jest.fn().mockReturnValue({ asCurrentUser });
     const coreSetup = {
       getStartServices: jest.fn().mockResolvedValue([
         { elasticsearch: { client: { asScoped } } },
         {
-          contextEngine: { getAiIndexDataReadService },
+          contextEngine: { getAiIndexDataReadService, getUserMemory },
           security,
+          spaces: { spacesService: { getSpaceId } },
         },
         {},
       ]),
@@ -72,6 +79,7 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
     >;
 
     let resolver: AiIndexResolver | undefined;
+    let userMemoryProvider: UserMemoryProvider | undefined;
     const register = jest.fn();
     const agentBuilder = {
       agents: {
@@ -79,6 +87,9 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
         registerType: jest.fn(),
         registerAiIndexResolver: jest.fn((registered: AiIndexResolver) => {
           resolver = registered;
+        }),
+        registerUserMemoryProvider: jest.fn((registered: UserMemoryProvider) => {
+          userMemoryProvider = registered;
         }),
       },
     } as unknown as AgentBuilderPluginSetup;
@@ -89,11 +100,13 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
       workflowsManagement: {} as any,
     });
 
-    if (!resolver) {
-      throw new Error('Expected an AI Index resolver to be registered');
+    if (!resolver || !userMemoryProvider) {
+      throw new Error('Expected an AI Index resolver and a user memory provider to be registered');
     }
     return {
       resolver,
+      userMemoryProvider,
+      getUserMemory,
       register,
       list,
       getAiIndexDataReadService,
@@ -105,12 +118,15 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
   };
 
   it('registers the tools with a Context Engine start accessor', async () => {
-    const { getAiIndexDataReadService } = setup({ aiIndices: [] });
+    const { getAiIndexDataReadService, getUserMemory } = setup({ aiIndices: [] });
     const { registerAgentBuilderTools } = jest.requireMock('./agent_builder/tools');
 
     const [{ getContextEngineStart }] = registerAgentBuilderTools.mock.calls.at(-1);
 
-    await expect(getContextEngineStart()).resolves.toEqual({ getAiIndexDataReadService });
+    await expect(getContextEngineStart()).resolves.toEqual({
+      getAiIndexDataReadService,
+      getUserMemory,
+    });
   });
 
   it('reads readable AI Indices as the requesting user through the data read service', async () => {
@@ -121,7 +137,11 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
     await resolver({ ids: ['my-custom'], request });
 
     expect(asScoped).toHaveBeenCalledWith(request);
-    expect(getAiIndexDataReadService).toHaveBeenCalledWith({ esClient: asCurrentUser, request });
+    expect(getAiIndexDataReadService).toHaveBeenCalledWith({
+      esClient: asCurrentUser,
+      request,
+      includeHidden: true,
+    });
   });
 
   it('registers a resolver mapping registry items to id, esqlTarget (dest.value) and description', async () => {
@@ -144,6 +164,55 @@ describe('registerContextEngineAgentBuilderIntegration', () => {
         memoryEnabled: true,
       },
     ]);
+  });
+
+  it('marks a hidden AI index, so it stays out of the catalog but still takes memories', async () => {
+    const { resolver } = setup({
+      aiIndices: [
+        {
+          id: 'user-memories',
+          dest: { type: 'index', value: '.ai-index-idx-user-memories' },
+          memory_enabled: true,
+          hidden: true,
+        },
+      ],
+    });
+
+    expect(await resolver({ ids: ['user-memories'], request })).toEqual([
+      {
+        id: 'user-memories',
+        esqlTarget: '.ai-index-idx-user-memories',
+        memoryEnabled: true,
+        hidden: true,
+      },
+    ]);
+  });
+
+  it("gives the user's facts and entities, newest first, from their per-user memory", async () => {
+    const { userMemoryProvider, getUserMemory } = setup({ aiIndices: [] });
+    getUserMemory.mockResolvedValue([
+      {
+        id: 'user-memories',
+        memory_scope: 'user',
+        kis: [
+          { id: 'u/1', type: 'fact.preference', content: 'Aisle seats.', updated_at: '2026-10-01' },
+          { id: 'u/2', type: 'session', title: 'Conversation', updated_at: '2026-10-30' },
+          { id: 'u/3', type: 'entity.user', title: 'profile', updated_at: '2026-10-28' },
+        ],
+      },
+    ]);
+
+    await expect(
+      userMemoryProvider({ aiIndexIds: ['elastic', 'user-memories'], request })
+    ).resolves.toEqual([
+      { type: 'entity.user', title: 'profile', updated_at: '2026-10-28' },
+      { type: 'fact.preference', content: 'Aisle seats.', updated_at: '2026-10-01' },
+    ]);
+    expect(getUserMemory).toHaveBeenCalledWith({
+      spaceId: 'marketing',
+      request,
+      input: { ai_index_ids: ['elastic', 'user-memories'] },
+    });
   });
 
   it('asks the service for the requested ids only, so just those are probed', async () => {

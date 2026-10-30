@@ -76,6 +76,15 @@ describe('AiIndexRegistry', () => {
       expect(registry.get('a')).toBe(properties);
       expect(registry.get('missing')).toBeUndefined();
     });
+
+    it('reports which ids were registered as hidden', () => {
+      registry.register('a', makeProperties({}));
+      registry.register('b', makeProperties({}), { hidden: true });
+
+      expect(registry.isHidden('a')).toBe(false);
+      expect(registry.isHidden('b')).toBe(true);
+      expect(registry.isHidden('missing')).toBe(false);
+    });
   });
 
   describe('ensure()', () => {

@@ -543,6 +543,14 @@ export const aiIndexHttpItemResponseSchema = () =>
         description: 'Whether the AI Index is managed by a plugin and therefore immutable.',
       },
     }),
+    hidden: schema.maybe(
+      schema.boolean({
+        meta: {
+          description:
+            'Set on a managed AI Index kept out of AI Index lists, queries and recall, such as user-memories. Only the memory APIs reach it.',
+        },
+      })
+    ),
     memory_enabled: schema.boolean({
       meta: { description: 'Whether this AI Index accepts memory writes.' },
     }),

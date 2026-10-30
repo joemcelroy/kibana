@@ -6,7 +6,12 @@
  */
 
 import type { AiIndexCatalogEntry } from '../../types';
-import { getAiIndicesInstructions } from './ai_indices';
+import {
+  getAiIndicesInstructions,
+  getUserMemoryInstructions,
+  MAX_USER_MEMORY_CONTENT_LENGTH,
+  MAX_USER_MEMORY_ENTRIES,
+} from './ai_indices';
 
 const defaultCatalog: AiIndexCatalogEntry[] = [
   {
@@ -59,7 +64,8 @@ describe('getAiIndicesInstructions', () => {
     const instructions = render();
 
     expect(instructions).toContain('start with `platform.context_engine.recall`');
-    expect(instructions).toContain('`user-memories` for what you know about the user');
+    expect(instructions).toContain("`scope: 'short-term'`");
+    expect(instructions).not.toContain('user-memories');
   });
 
   it('renders each catalog entry with its registry ID, ES|QL target, and description', () => {
@@ -156,18 +162,97 @@ describe('getAiIndicesInstructions', () => {
       catalog: [
         ...defaultCatalog,
         {
-          id: 'user-memories',
-          esqlTarget: 'ai-index-idx-user-memories',
-          description: 'What agents learned about each user.',
+          id: 'support-insights',
+          esqlTarget: 'ai-index-idx-support-insights',
+          description: 'What support learned.',
           memoryEnabled: true,
         },
       ],
     });
 
     expect(instructions).toContain(
-      '- Registry ID: `user-memories`; ES|QL target: ai-index-idx-user-memories; takes memories — What agents learned about each user.'
+      '- Registry ID: `support-insights`; ES|QL target: ai-index-idx-support-insights; takes memories — What support learned.'
     );
     expect(instructions).toContain('record it with `remember`');
+    expect(instructions).toContain('Memories go to the AI Indices above');
     expect(render({ catalog: defaultCatalog })).not.toContain('`remember`');
+  });
+
+  describe('with a hidden AI Index', () => {
+    const userMemories: AiIndexCatalogEntry = {
+      id: 'user-memories',
+      esqlTarget: '.ai-index-idx-user-memories',
+      description: 'What agents learned about each user.',
+      memoryEnabled: true,
+      hidden: true,
+    };
+
+    it('leaves it out of the list, and says remembering about the user carries over', () => {
+      const instructions = render({ catalog: [...defaultCatalog, userMemories] });
+
+      expect(instructions).toContain('- Registry ID: `elastic`');
+      expect(instructions).not.toContain('user-memories');
+      expect(instructions).toContain('record it with `remember`');
+      expect(instructions).not.toContain('Memories go to the AI Indices above');
+      expect(instructions).toContain('it becomes part of what you know about them');
+    });
+
+    it('renders only remember guidance when it is the only AI Index', () => {
+      const instructions = render({ catalog: [userMemories] });
+
+      expect(instructions).toContain('## MEMORY');
+      expect(instructions).toContain('record it with `remember`');
+      expect(instructions).not.toContain('## AI INDICES');
+      expect(instructions).not.toContain('recall');
+    });
+
+    it('renders nothing when it is the only AI Index and takes no memories', () => {
+      expect(render({ catalog: [{ ...userMemories, memoryEnabled: false }] })).toBe('');
+    });
+  });
+});
+
+describe('getUserMemoryInstructions', () => {
+  const profile = {
+    type: 'entity.user',
+    title: 'profile',
+    content: '## Work context\nRuns support for the loyalty program.',
+    updated_at: '2026-10-28T12:00:00.000Z',
+  };
+
+  it('renders nothing when disabled or with nothing to give', () => {
+    expect(getUserMemoryInstructions({ enabled: false, userMemory: [profile] })).toBe('');
+    expect(getUserMemoryInstructions({ enabled: true, userMemory: [] })).toBe('');
+    expect(
+      getUserMemoryInstructions({ enabled: true, userMemory: [{ type: 'fact.preference' }] })
+    ).toBe('');
+  });
+
+  it('lists what is known about the user on one line each, with its type and date', () => {
+    const instructions = getUserMemoryInstructions({
+      enabled: true,
+      userMemory: [profile, { type: 'fact.preference', content: 'Prefers aisle seats.' }],
+    });
+
+    expect(instructions).toContain('## ABOUT THE USER');
+    expect(instructions).toContain('what the user says now wins');
+    expect(instructions).toContain(
+      '- profile: ## Work context Runs support for the loyalty program. (entity.user, 2026-10-28)'
+    );
+    expect(instructions).toContain('- Prefers aisle seats. (fact.preference)');
+  });
+
+  it('caps how many entries it gives and how long each is', () => {
+    const instructions = getUserMemoryInstructions({
+      enabled: true,
+      userMemory: Array.from({ length: MAX_USER_MEMORY_ENTRIES + 5 }, (_, index) => ({
+        type: 'fact.history',
+        content: `${index}:${'x'.repeat(MAX_USER_MEMORY_CONTENT_LENGTH)}`,
+      })),
+    });
+
+    expect(instructions.match(/^- /gm)).toHaveLength(MAX_USER_MEMORY_ENTRIES);
+    expect(instructions).not.toContain(`${MAX_USER_MEMORY_ENTRIES}:`);
+    expect(instructions).toContain('…');
   });
 });

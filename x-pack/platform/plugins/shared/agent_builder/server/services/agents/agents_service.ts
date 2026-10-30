@@ -18,6 +18,7 @@ import type {
   AgentAvailabilityConfig,
   AgentTypeRegistry,
   AiIndexResolver,
+  UserMemoryProvider,
 } from '@kbn/agent-builder-server/agents';
 import { chatAgentTypeId } from '@kbn/agent-builder-common';
 import type { SpacesPluginStart } from '@kbn/spaces-plugin/server';
@@ -64,6 +65,7 @@ export class AgentsService {
   /** In-memory UI visibility overrides for persisted agents, keyed by agent id. Filled by `ensure`. */
   private readonly hiddenByAgentId = new Map<string, boolean>();
   private aiIndexResolver?: AiIndexResolver;
+  private userMemoryProvider?: UserMemoryProvider;
 
   private setupDeps?: AgentsServiceSetupDeps;
 
@@ -96,6 +98,12 @@ export class AgentsService {
           throw new Error('An AI index resolver is already registered');
         }
         this.aiIndexResolver = resolver;
+      },
+      registerUserMemoryProvider: (provider) => {
+        if (this.userMemoryProvider) {
+          throw new Error('A user memory provider is already registered');
+        }
+        this.userMemoryProvider = provider;
       },
     };
   }
@@ -266,6 +274,7 @@ export class AgentsService {
       removeSkillRefsFromAgents,
       getAgentsUsingSkills,
       getAiIndexResolver: () => this.aiIndexResolver,
+      getUserMemoryProvider: () => this.userMemoryProvider,
     };
   }
 }

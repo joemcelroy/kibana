@@ -43,6 +43,7 @@ describe('registerStepDefinitions', () => {
         getDreamingService: () => ({} as DreamingService),
         getMemoryReader: () => ({} as DreamingMemoryReader),
         getRunProgress: () => ({} as DreamingRunProgress),
+        getInternalEsClient: jest.fn(),
         getDreamingModel: jest.fn(),
         isContextEngineEnabled: async () => true,
         logger: telemetry.logger,

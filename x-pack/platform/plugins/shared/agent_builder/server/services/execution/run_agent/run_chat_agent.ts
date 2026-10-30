@@ -191,6 +191,7 @@ export const runDefaultAgentMode: RunChatAgentFn = async (
       aiIndicesEnabled: experimentalFeatures.aiIndices,
       request,
       resolver: context.aiIndexResolver,
+      userMemoryProvider: context.userMemoryProvider,
       logger,
     }),
     experimentalFeatures.relevantSkills ? modelProvider.hasFastModel() : false,

@@ -15,8 +15,9 @@ import type {
 } from '../../common/http_api/ai_indices';
 import { AiIndexAuditAction, aiIndexAuditEvent } from '../audit/audit_events';
 import { describeAiIndex } from './describe';
-import { AiIndexNotReadableError } from './errors';
+import { AiIndexNotFoundError, AiIndexNotReadableError, InvalidAiIndexQueryError } from './errors';
 import { filterReadableAiIndices, probeAiIndices } from './filter_readable_ai_indices';
+import { isAiIndexDest, sourcesOf } from './missing_indices';
 import { queryAiIndices } from './query';
 import type { AiIndexService } from './service';
 
@@ -28,7 +29,8 @@ export interface AiIndexDataReadServiceApi {
   /**
    * The AI Indices registered in this space whose backing index the caller can read. An empty
    * backing index still counts. Left out when the caller cannot read it, or when the check itself
-   * failed. `ids` limits which entries are checked.
+   * failed. `ids` limits which entries are checked. Hidden AI indices are left out too, unless the
+   * service was created to include them.
    */
   list(ids?: string[]): Promise<AiIndexHttpItem[]>;
 }
@@ -44,17 +46,37 @@ export class AiIndexDataReadService implements AiIndexDataReadServiceApi {
       isMemoryEnabled: () => Promise<boolean>;
       /** The ids the caller's user-scoped KIs can be owned by: profile uid and username. */
       getCurrentUserIds?: () => string[];
+      /**
+       * Reads hidden AI indices too, such as user-memories. Only the memory APIs set it; reading
+       * one needs the internal user's client, since its backing store is a system index.
+       */
+      includeHidden?: boolean;
     }
   ) {}
+
+  private isVisible = ({ hidden }: AiIndexHttpItem): boolean =>
+    this.deps.includeHidden === true || hidden !== true;
+
+  /** Refuses a query that names a hidden AI index's backing index. */
+  private assertNoHiddenSource(query: string, aiIndices: AiIndexHttpItem[]): void {
+    const hidden = aiIndices.filter((aiIndex) => !this.isVisible(aiIndex));
+    const named = hidden.find(({ dest }) =>
+      sourcesOf(query).some((source) => isAiIndexDest(source, [dest]))
+    );
+    if (named) {
+      throw new InvalidAiIndexQueryError(`AI index '${named.id}' cannot be queried.`);
+    }
+  }
 
   async query(request: QueryAiIndicesRequest): Promise<QueryAiIndicesResponse> {
     const { esClient, spaceId, auditLogger, aiIndexService } = this.deps;
     try {
       const aiIndices = await aiIndexService.list(spaceId);
+      this.assertNoHiddenSource(request.query, aiIndices);
       const response = await queryAiIndices({
         esClient,
         spaceId,
-        aiIndexDests: aiIndices.map(({ dest }) => dest),
+        aiIndexDests: aiIndices.filter(this.isVisible).map(({ dest }) => dest),
         userScopedDests: aiIndices
           .filter(({ memory_scope: scope }) => scope === 'user')
           .map(({ dest }) => dest),
@@ -89,6 +111,9 @@ export class AiIndexDataReadService implements AiIndexDataReadServiceApi {
         aiIndexService.get(id, spaceId),
         isMemoryEnabled(),
       ]);
+      if (!this.isVisible(aiIndex)) {
+        throw new AiIndexNotFoundError(id);
+      }
       await this.assertReadable(aiIndex);
       const response = await describeAiIndex({ esClient, aiIndex, spaceId, includeMemory });
       auditLogger.log(aiIndexAuditEvent({ action: AiIndexAuditAction.DESCRIBE, id }));
@@ -104,8 +129,19 @@ export class AiIndexDataReadService implements AiIndexDataReadServiceApi {
     try {
       const registry = await aiIndexService.list(spaceId);
       const requested = ids && new Set(ids);
-      const aiIndices = requested ? registry.filter(({ id }) => requested.has(id)) : registry;
-      const readable = await filterReadableAiIndices({ esClient, aiIndices, logger });
+      const aiIndices = registry.filter(
+        (aiIndex) => this.isVisible(aiIndex) && (!requested || requested.has(aiIndex.id))
+      );
+      // A hidden AI index lives in a system index only Kibana reads, so the caller's privileges
+      // on it say nothing: it is listed when asked for, and read through the memory APIs.
+      const probed = await filterReadableAiIndices({
+        esClient,
+        aiIndices: aiIndices.filter(({ hidden }) => !hidden),
+        logger,
+      });
+      const readable = aiIndices.filter(
+        (aiIndex) => aiIndex.hidden || probed.some(({ id }) => id === aiIndex.id)
+      );
       auditLogger.log(aiIndexAuditEvent({ action: AiIndexAuditAction.LIST }));
       return readable;
     } catch (error) {

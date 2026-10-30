@@ -116,10 +116,11 @@ export const createRememberTool = ({
 
     try {
       const contextEngine = await getContextEngineStart();
+      const agentAiIndices = conversationId ? agent?.aiIndices : undefined;
       const targets = await chooseMemoryTargets({
         contextEngine,
         spaceId,
-        agentAiIndices: conversationId ? agent?.aiIndices : undefined,
+        agentAiIndices,
         requested: params.aiIndexIds,
         aboutUser: params.aboutUser === true,
       });
@@ -132,6 +133,9 @@ export const createRememberTool = ({
       const remembered = await contextEngine.remember({
         spaceId,
         request,
+        // In a conversation the targets are the agent's, user-memories among them when the agent
+        // remembers users. Over MCP, a hidden AI index named in aiIndexIds is refused.
+        includeHidden: agentAiIndices !== undefined,
         input: {
           content: params.content,
           ...((conversationId ?? params.sessionId) && {
