@@ -50,3 +50,107 @@ describe('buildInput', () => {
     );
   });
 });
+
+describe('buildSystemPrompt', () => {
+  const config = {
+    enabled: true,
+    facts: [{ type: 'preference' }],
+    entities: {
+      nodes: [{ type: 'person' }],
+      edges: [{ type: 'knows', source: 'person', target: 'person' }],
+    },
+  };
+
+  it('asks for facts, entities and relationships when all are configured', () => {
+    const prompt = buildSystemPrompt(config);
+
+    expect(prompt).toContain('entities, facts about them, and relationships between entities');
+    expect(prompt).toContain('FACT TYPES:\n- preference');
+    expect(prompt).toContain('ENTITY TYPES:\n- person');
+    expect(prompt).toContain('List every entity a fact is about');
+  });
+
+  it('asks for standalone facts only while entities are not configured', () => {
+    const prompt = buildSystemPrompt({ ...config, entities: null });
+
+    expect(prompt).toContain('long-term memory: standalone facts.');
+    expect(prompt).toContain('ENTITY TYPES: none; return no entities.');
+    expect(prompt).toContain('RELATIONSHIP TYPES: none; return no relationships.');
+    expect(prompt).not.toContain('List every entity a fact is about');
+  });
+
+  it('asks for entities and relationships only while facts are empty', () => {
+    const prompt = buildSystemPrompt({ ...config, facts: [] });
+
+    expect(prompt).toContain('long-term memory: entities and relationships between them.');
+    expect(prompt).toContain('FACT TYPES: none; return no facts.');
+    expect(prompt).toContain('ENTITY TYPES:\n- person');
+  });
+
+  it('asks for no relationships while edges are empty', () => {
+    const prompt = buildSystemPrompt({ ...config, entities: { nodes: config.entities.nodes } });
+
+    expect(prompt).toContain('long-term memory: entities, facts about them.');
+    expect(prompt).toContain('RELATIONSHIP TYPES: none; return no relationships.');
+    expect(prompt).not.toContain('Add a relationship of a configured type');
+  });
+
+  it('asks the model to cite an item seen again', () => {
+    expect(buildSystemPrompt(config)).toContain('that records that it was seen again');
+  });
+});
+
+describe('existing items in the input', () => {
+  it('show how often and when each was last seen', () => {
+    const input = buildInput({
+      memories: [],
+      staleSources: [],
+      existing: [
+        {
+          id: 'alice/fact-tea',
+          type: 'fact.preference',
+          title: 'Tea',
+          content: 'Bob prefers tea',
+          attributes: {
+            'memory.number_of_occurrences': 3,
+            'memory.last_seen_at': '2026-10-02T10:00:00.000Z',
+          },
+          references: [{ uri: 'memory://m-1', relation: 'derived_from' }],
+        },
+      ],
+    });
+    const [shown] = JSON.parse(input.split('EXISTING:\n')[1]);
+
+    expect(shown).toEqual(
+      expect.objectContaining({
+        number_of_occurrences: 3,
+        last_seen_at: '2026-10-02T10:00:00.000Z',
+      })
+    );
+  });
+});
+
+describe('existing entities in the input', () => {
+  it('show attributes by their own names, old entity.<key> ones included', () => {
+    const input = buildInput({
+      memories: [],
+      staleSources: [],
+      existing: [
+        {
+          id: 'alice/entity-problem-delay',
+          type: 'entity.problem',
+          title: 'Delay',
+          attributes: {
+            category: 'Flight Disruption',
+            'entity.severity': 'high',
+            'memory.user_id': 'alice',
+            esql: ['FROM flights | LIMIT 1'],
+          },
+        },
+      ],
+    });
+    const [shown] = JSON.parse(input.split('EXISTING:\n')[1]);
+
+    expect(shown.attributes).toEqual({ category: 'Flight Disruption', severity: 'high' });
+  });
+});

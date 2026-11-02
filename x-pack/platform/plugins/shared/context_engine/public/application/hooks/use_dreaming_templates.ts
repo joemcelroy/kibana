@@ -50,3 +50,30 @@ export const useDreamingTemplate = (
   });
   return { template: data, isLoading: isInitialLoading, error: error ?? undefined };
 };
+
+export type LoadedDreamingTemplate = DreamingTemplateSummary & DreamingTemplate;
+
+/** Every example dreaming config, loaded, in `index.json` order. */
+export const useAllDreamingTemplates = (): {
+  templates: LoadedDreamingTemplate[];
+  isLoading: boolean;
+  error: Error | undefined;
+} => {
+  const {
+    services: { http },
+  } = useKibana();
+  const { data, isLoading, error } = useQuery<LoadedDreamingTemplate[], Error>({
+    queryKey: contextEngineQueryKeys.dreamingTemplates.all(),
+    queryFn: async ({ signal }) => {
+      const { templates } = await listDreamingTemplates(http, { signal });
+      return Promise.all(
+        templates.map(async (summary) => ({
+          ...summary,
+          ...(await getDreamingTemplate(http, { id: summary.id, signal })),
+        }))
+      );
+    },
+    ...STATIC,
+  });
+  return { templates: data ?? [], isLoading, error: error ?? undefined };
+};

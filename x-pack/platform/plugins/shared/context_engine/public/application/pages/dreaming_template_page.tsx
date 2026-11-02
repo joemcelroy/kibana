@@ -12,9 +12,7 @@ import {
   EuiFlexItem,
   EuiFormRow,
   EuiHorizontalRule,
-  EuiIcon,
   EuiPanel,
-  EuiSkeletonRectangle,
   EuiSkeletonText,
   EuiSpacer,
   EuiText,
@@ -26,18 +24,17 @@ import { css } from '@emotion/react';
 import { i18n } from '@kbn/i18n';
 import { FormattedMessage } from '@kbn/i18n-react';
 import { KbnDangerCallout } from '@kbn/ui-callout';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import {
-  buildDreamingTemplateConfig,
-  type DreamingTemplate,
-  type DreamingTemplateConfig,
-  type DreamingTemplateSummary,
-} from '../../../common/dreaming_templates';
+import { buildDreamingTemplateConfig } from '../../../common/dreaming_templates';
 import { AI_INDEX_CREATED_LOCATION_STATE } from '../ai_index_created_location_state';
-import { DreamingTemplateOntology } from '../components/dreaming_template/dreaming_template_ontology';
-import { Eyebrow } from '../components/dreaming_template/eyebrow';
-import { OntologyGraph } from '../components/dreaming_template/ontology_graph';
+import {
+  DreamingConfigEditor,
+  draftBuildsAnything,
+  draftOf,
+  typesOfDraft,
+  type DreamingConfigDraft,
+} from '../components/dreaming_config/dreaming_config_editor';
 import { useApplyDreamingTemplate } from '../hooks/use_apply_dreaming_template';
 import { useContextEngineBreadcrumbs } from '../hooks/use_context_engine_breadcrumbs';
 import { useDreamingTemplate, useDreamingTemplates } from '../hooks/use_dreaming_templates';
@@ -60,375 +57,112 @@ const loadErrorTitle = i18n.translate('xpack.contextEngine.dreamingTemplate.load
   defaultMessage: 'Unable to load the examples',
 });
 
-const skipLabel = i18n.translate('xpack.contextEngine.dreamingTemplate.skipButton', {
-  defaultMessage: 'Skip for now',
-});
+/** The choice of starting from nothing instead of an example. */
+export const CUSTOM_TEMPLATE_ID = 'custom';
 
-const STEP_COUNT = 2;
-
-/** Scrolls whatever holds the element back to the top, so a new step starts at its heading. */
-const scrollToTop = (element: HTMLElement | null) => {
-  for (let node = element?.parentElement; node; node = node.parentElement) {
-    if (node.scrollTop > 0) {
-      node.scrollTop = 0;
-    }
-  }
-};
-
-const StepEyebrow = ({ step }: { step: number }) => (
-  <Eyebrow>
-    {i18n.translate('xpack.contextEngine.dreamingTemplate.stepEyebrow', {
-      defaultMessage: 'Step {step} of {count}',
-      values: { step, count: STEP_COUNT },
-    })}
-  </Eyebrow>
-);
+const EMPTY_DRAFT: DreamingConfigDraft = draftOf({});
 
 const Highlight = ({ children }: { children: React.ReactNode }) => {
   const { euiTheme } = useEuiTheme();
   return <span css={{ color: euiTheme.colors.textPrimary }}>{children}</span>;
 };
 
-const StepHeading = ({
-  step,
-  title,
-  lead,
-}: {
-  step: number;
-  title: React.ReactNode;
-  lead: string;
-}) => (
-  <>
-    <StepEyebrow step={step} />
-    <EuiSpacer size="m" />
-    <EuiTitle size="l">
-      <h2>{title}</h2>
-    </EuiTitle>
-    <EuiSpacer size="m" />
-    <EuiText color="subdued">
-      <p>{lead}</p>
-    </EuiText>
-  </>
-);
-
+/** Outlined chips; the picked one is tinted and checked. */
 const usePillStyles = () => {
   const { euiTheme } = useEuiTheme();
-  return css`
-    border-radius: ${euiTheme.size.xxl};
-    padding-inline: ${euiTheme.size.l};
+  const base = css`
+    border-radius: ${euiTheme.size.xl};
+    padding-inline: ${euiTheme.size.m};
+    font-weight: ${euiTheme.font.weight.regular};
+    background: transparent;
+    border: ${euiTheme.border.width.thin} solid ${euiTheme.colors.borderBaseSubdued};
+    color: ${euiTheme.colors.textParagraph};
+    &:hover:not(:disabled) {
+      background: ${euiTheme.colors.backgroundBaseSubdued};
+    }
   `;
+  return {
+    base,
+    selected: css`
+      ${base};
+      font-weight: ${euiTheme.font.weight.medium};
+      background: ${euiTheme.colors.backgroundLightPrimary};
+      border-color: ${euiTheme.colors.borderBasePrimary};
+      color: ${euiTheme.colors.textPrimary};
+      &:hover:not(:disabled) {
+        background: ${euiTheme.colors.backgroundLightPrimary};
+      }
+    `,
+  };
 };
 
-interface DescribeStepProps {
-  templates: DreamingTemplateSummary[];
-  isLoading: boolean;
-  selectedId: string | undefined;
-  onSelect: (id: string) => void;
-  template: DreamingTemplate | undefined;
-  templateError: Error | undefined;
-  summary: string;
-  onSummaryChange: (summary: string) => void;
-  onSkip: () => void;
-  onNext: () => void;
+interface PillProps {
+  label: string;
+  isSelected: boolean;
+  iconType?: string;
+  onClick: () => void;
+  'data-test-subj': string;
 }
 
-/** Step 1: pick the example closest to what's being built, and describe it. */
-const DescribeStep = ({
-  templates,
-  isLoading,
-  selectedId,
-  onSelect,
-  template,
-  templateError,
-  summary,
-  onSummaryChange,
-  onSkip,
-  onNext,
-}: DescribeStepProps) => {
-  const pillStyles = usePillStyles();
-  const selected = templates.find(({ id }) => id === selectedId);
+const Pill = ({
+  label,
+  isSelected,
+  iconType,
+  onClick,
+  'data-test-subj': dataTestSubj,
+}: PillProps) => {
+  const styles = usePillStyles();
   return (
-    <>
-      <StepHeading
-        step={1}
-        title={
-          <FormattedMessage
-            id="xpack.contextEngine.dreamingTemplate.describe.title"
-            defaultMessage="What are you {building}?"
-            values={{
-              building: (
-                <Highlight>
-                  {i18n.translate('xpack.contextEngine.dreamingTemplate.describe.titleHighlight', {
-                    defaultMessage: 'building',
-                  })}
-                </Highlight>
-              ),
-            }}
-          />
-        }
-        lead={i18n.translate('xpack.contextEngine.dreamingTemplate.describe.lead', {
-          defaultMessage:
-            "Pick the example closest to your agent and describe it. We'll propose the facts, entities and relationships dreaming learns from this AI index's memories, for you to review next.",
-        })}
-      />
-      <EuiSpacer size="xl" />
-      {templateError ? (
-        <KbnDangerCallout announceOnMount={false} title={loadErrorTitle} size="s">
-          {templateError.message}
-        </KbnDangerCallout>
-      ) : template ? (
-        <OntologyGraph
-          entities={template.dreaming.entities ?? []}
-          relationships={template.dreaming.relationships ?? []}
-        />
-      ) : (
-        <EuiSkeletonRectangle width="100%" height={300} borderRadius="m" />
-      )}
-      <EuiSpacer size="xl" />
-      <EuiFormRow
-        fullWidth
-        label={i18n.translate('xpack.contextEngine.dreamingTemplate.describe.examplesLabel', {
-          defaultMessage: 'What are you building?',
-        })}
-        helpText={selected?.description}
-      >
-        {isLoading ? (
-          <EuiSkeletonText lines={2} data-test-subj="contextDreamingTemplatesLoading" />
-        ) : (
-          <EuiFlexGroup gutterSize="s" wrap responsive={false} role="group">
-            {templates.map(({ id, name }) => {
-              const isSelected = id === selectedId;
-              return (
-                <EuiFlexItem grow={false} key={id}>
-                  <EuiButton
-                    css={pillStyles}
-                    fill={isSelected}
-                    color={isSelected ? 'primary' : 'text'}
-                    isSelected={isSelected}
-                    onClick={() => onSelect(id)}
-                    data-test-subj={`contextDreamingTemplateOption-${id}`}
-                  >
-                    {name}
-                  </EuiButton>
-                </EuiFlexItem>
-              );
-            })}
-          </EuiFlexGroup>
-        )}
-      </EuiFormRow>
-      <EuiSpacer size="l" />
-      <EuiFormRow
-        fullWidth
-        label={i18n.translate('xpack.contextEngine.dreamingTemplate.describe.summaryLabel', {
-          defaultMessage: 'Describe your company, your agent and the knowledge it needs',
-        })}
-        helpText={i18n.translate('xpack.contextEngine.dreamingTemplate.describe.summaryHelpText', {
-          defaultMessage:
-            'Choose an example to start, then edit it to fit. Your description opens the instructions dreaming follows.',
-        })}
-      >
-        <EuiTextArea
-          fullWidth
-          rows={4}
-          value={summary}
-          isLoading={!template && !templateError}
-          onChange={(event) => onSummaryChange(event.target.value)}
-          data-test-subj="contextDreamingTemplateSummary"
-        />
-      </EuiFormRow>
-      <EuiHorizontalRule margin="xl" />
-      <EuiFlexGroup justifyContent="spaceBetween" alignItems="center" responsive={false}>
-        <EuiFlexItem grow={false}>
-          <EuiButtonEmpty
-            color="text"
-            onClick={onSkip}
-            data-test-subj="contextDreamingTemplateSkip"
-          >
-            {skipLabel}
-          </EuiButtonEmpty>
-        </EuiFlexItem>
-        <EuiFlexItem grow={false}>
-          <EuiButton
-            fill
-            iconType="chevronSingleRight"
-            iconSide="right"
-            onClick={onNext}
-            isDisabled={!template}
-            data-test-subj="contextDreamingTemplateNext"
-          >
-            {i18n.translate('xpack.contextEngine.dreamingTemplate.describe.nextButton', {
-              defaultMessage: 'Propose an ontology',
-            })}
-          </EuiButton>
-        </EuiFlexItem>
-      </EuiFlexGroup>
-    </>
-  );
-};
-
-interface ReviewStepProps {
-  template: DreamingTemplate;
-  config: DreamingTemplateConfig;
-  isSaving: boolean;
-  onBack: () => void;
-  onSkip: () => void;
-  onApply: () => void;
-}
-
-/** Step 2: the ontology the example proposes, to apply or skip. */
-const ReviewStep = ({ template, config, isSaving, onBack, onSkip, onApply }: ReviewStepProps) => {
-  const { euiTheme } = useEuiTheme();
-  return (
-    <>
-      <StepHeading
-        step={2}
-        title={
-          <FormattedMessage
-            id="xpack.contextEngine.dreamingTemplate.review.title"
-            defaultMessage="A proposed ontology for {yourDomain}"
-            values={{
-              yourDomain: (
-                <Highlight>
-                  {i18n.translate('xpack.contextEngine.dreamingTemplate.review.titleHighlight', {
-                    defaultMessage: 'your domain',
-                  })}
-                </Highlight>
-              ),
-            }}
-          />
-        }
-        lead={i18n.translate('xpack.contextEngine.dreamingTemplate.review.lead', {
-          defaultMessage:
-            'These types shape how dreaming turns this AI index’s memories into knowledge your agent can recall. Apply them and turn dreaming on, or skip and set it up later.',
-        })}
-      />
-      <EuiSpacer size="l" />
-      <EuiPanel
-        color="primary"
-        hasShadow={false}
-        paddingSize="l"
-        data-test-subj="contextDreamingTemplateRationale"
-      >
-        <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-          <EuiFlexItem grow={false}>
-            <EuiIcon type="sparkles" color="primary" aria-hidden />
-          </EuiFlexItem>
-          <EuiFlexItem grow={false}>
-            <Eyebrow>
-              {i18n.translate('xpack.contextEngine.dreamingTemplate.review.rationaleTitle', {
-                defaultMessage: 'Why this shape',
-              })}
-            </Eyebrow>
-          </EuiFlexItem>
-        </EuiFlexGroup>
-        <EuiSpacer size="s" />
-        <EuiText css={{ color: euiTheme.colors.textParagraph }}>
-          <p>{template.rationale}</p>
-        </EuiText>
-      </EuiPanel>
-      <EuiSpacer size="m" />
-      {config.group_by && (
-        <>
-          <EuiText size="s" color="subdued" data-test-subj="contextDreamingTemplateGroupBy">
-            <EuiIcon type="user" aria-hidden />{' '}
-            <FormattedMessage
-              id="xpack.contextEngine.dreamingTemplate.review.groupBy"
-              defaultMessage="Learned per {field}: memories are grouped by it, and each group is turned into knowledge on its own."
-              values={{ field: <strong>{config.group_by}</strong> }}
-            />
-          </EuiText>
-          <EuiSpacer size="s" />
-        </>
-      )}
-      <EuiText size="xs" color="subdued">
-        <EuiIcon type="info" size="s" aria-hidden />{' '}
-        {i18n.translate('xpack.contextEngine.dreamingTemplate.review.guidance', {
-          defaultMessage:
-            'These types guide what dreaming looks for. You can change them, and the instructions, later.',
-        })}
-      </EuiText>
-      <EuiSpacer size="xl" />
-      <DreamingTemplateOntology config={config} />
-      <EuiHorizontalRule margin="xl" />
-      <EuiFlexGroup justifyContent="spaceBetween" alignItems="center" responsive={false}>
-        <EuiFlexItem grow={false}>
-          <EuiButtonEmpty
-            iconType="chevronSingleLeft"
-            onClick={onBack}
-            data-test-subj="contextDreamingTemplateBack"
-          >
-            {i18n.translate('xpack.contextEngine.dreamingTemplate.review.backButton', {
-              defaultMessage: 'Back',
-            })}
-          </EuiButtonEmpty>
-        </EuiFlexItem>
-        <EuiFlexItem grow={false}>
-          <EuiFlexGroup gutterSize="s" alignItems="center" responsive={false}>
-            <EuiFlexItem grow={false}>
-              <EuiButtonEmpty
-                color="text"
-                onClick={onSkip}
-                data-test-subj="contextDreamingTemplateSkip"
-              >
-                {skipLabel}
-              </EuiButtonEmpty>
-            </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiButton
-                fill
-                onClick={onApply}
-                isLoading={isSaving}
-                data-test-subj="contextDreamingTemplateSave"
-              >
-                {i18n.translate('xpack.contextEngine.dreamingTemplate.review.applyButton', {
-                  defaultMessage: 'Apply and continue',
-                })}
-              </EuiButton>
-            </EuiFlexItem>
-          </EuiFlexGroup>
-        </EuiFlexItem>
-      </EuiFlexGroup>
-    </>
+    <EuiButton
+      size="s"
+      css={isSelected ? styles.selected : styles.base}
+      color={isSelected ? 'primary' : 'text'}
+      iconType={isSelected ? 'check' : iconType}
+      isSelected={isSelected}
+      onClick={onClick}
+      data-test-subj={dataTestSubj}
+    >
+      {label}
+    </EuiButton>
   );
 };
 
 /**
- * The step after creating an AI index with memory: pick the example closest to what's being built
- * and describe it, then review the ontology it proposes and apply it, or skip. Either way it
- * continues to the AI index's own onboarding.
+ * The step after creating an AI index with memory, on one screen: pick the example closest to
+ * what's being built, or start from scratch, describe it, and shape what dreaming learns: fact
+ * types, then entity and relationship types if wanted. Applying turns dreaming on; skipping saves
+ * nothing. Either way it continues to the AI index's own onboarding.
  */
 export const DreamingTemplatePage = () => {
   const { id: aiIndexId } = useParams<{ id: string }>();
   const { createContextEngineUrl, navigateToContextEngine } = useNavigation();
   const { templates, isLoading, error } = useDreamingTemplates();
   const [pickedId, setPickedId] = useState<string>();
-  // Until edited, the description is the example's.
+  // Until edited, the description and the types are the example's.
   const [editedSummary, setEditedSummary] = useState<string>();
-  const [step, setStep] = useState<'describe' | 'review'>('describe');
+  const [edited, setEdited] = useState<{ id: string; draft: DreamingConfigDraft }>();
   const selectedId = pickedId ?? templates[0]?.id;
-  const { template, error: templateError } = useDreamingTemplate(selectedId);
+  const isCustom = selectedId === CUSTOM_TEMPLATE_ID;
+  const { template, error: templateError } = useDreamingTemplate(isCustom ? undefined : selectedId);
   const { applyTemplate, isSaving } = useApplyDreamingTemplate();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const shownStep = useRef(step);
   const detailPath = getAiIndexDetailPath(aiIndexId);
 
   useContextEngineBreadcrumbs([{ text: aiIndexId, path: detailPath }, { text: pageTitle }]);
 
-  useEffect(() => {
-    if (shownStep.current !== step) {
-      shownStep.current = step;
-      scrollToTop(panelRef.current);
-    }
-  }, [step]);
-
-  const summary = editedSummary ?? template?.summary ?? '';
-
-  const config = useMemo(
-    () => (template ? buildDreamingTemplateConfig(template, summary) : undefined),
-    [template, summary]
+  const proposed = useMemo(
+    () =>
+      isCustom
+        ? EMPTY_DRAFT
+        : template
+        ? draftOf(template.dreaming, { entitiesEnabled: false })
+        : undefined,
+    [isCustom, template]
   );
+  const draft = edited !== undefined && edited.id === selectedId ? edited.draft : proposed;
+  const summary = editedSummary ?? (isCustom ? '' : template?.summary ?? '');
+  const selected = templates.find(({ id }) => id === selectedId);
 
-  const selectTemplate = (id: string) => {
+  const select = (id: string) => {
     if (id !== selectedId) {
       setPickedId(id);
       setEditedSummary(undefined);
@@ -439,10 +173,23 @@ export const DreamingTemplatePage = () => {
     navigateToContextEngine(detailPath, undefined, AI_INDEX_CREATED_LOCATION_STATE);
 
   const applyAndContinue = async () => {
-    if (config && (await applyTemplate({ aiIndexId, config }))) {
+    if (!draft) {
+      return;
+    }
+    const config = buildDreamingTemplateConfig(
+      {
+        summary: '',
+        rationale: '',
+        dreaming: { ...(isCustom ? {} : template?.dreaming), ...typesOfDraft(draft) },
+      },
+      summary
+    );
+    if (await applyTemplate({ aiIndexId, config })) {
       continueToAiIndex();
     }
   };
+
+  const canApply = draft !== undefined && draftBuildsAnything(draft);
 
   return (
     <ContextEnginePageTemplate data-test-subj="contextDreamingTemplatePage">
@@ -456,41 +203,159 @@ export const DreamingTemplatePage = () => {
         pageTitle={pageTitle}
       />
       <ContextEnginePageSection>
-        <div ref={panelRef}>
-          <EuiPanel hasBorder paddingSize="xl">
-            {error ? (
-              <KbnDangerCallout
-                announceOnMount={false}
-                title={loadErrorTitle}
-                data-test-subj="contextDreamingTemplatesError"
+        <EuiPanel hasBorder paddingSize="xl">
+          {error ? (
+            <KbnDangerCallout
+              announceOnMount={false}
+              title={loadErrorTitle}
+              data-test-subj="contextDreamingTemplatesError"
+            >
+              {error.message}
+            </KbnDangerCallout>
+          ) : (
+            <>
+              <EuiTitle size="l">
+                <h2>
+                  <FormattedMessage
+                    id="xpack.contextEngine.dreamingTemplate.heading"
+                    defaultMessage="What should {dreaming} learn?"
+                    values={{
+                      dreaming: (
+                        <Highlight>
+                          {i18n.translate('xpack.contextEngine.dreamingTemplate.headingHighlight', {
+                            defaultMessage: 'dreaming',
+                          })}
+                        </Highlight>
+                      ),
+                    }}
+                  />
+                </h2>
+              </EuiTitle>
+              <EuiSpacer size="m" />
+              <EuiText color="subdued">
+                <p>
+                  {i18n.translate('xpack.contextEngine.dreamingTemplate.lead', {
+                    defaultMessage:
+                      'Start from the example closest to your agent, or from scratch. Dreaming turns this AI index’s memories and conversations into the facts below, and, once you turn them on, entities and relationships.',
+                  })}
+                </p>
+              </EuiText>
+              <EuiSpacer size="xl" />
+              <EuiFormRow
+                fullWidth
+                label={i18n.translate('xpack.contextEngine.dreamingTemplate.examplesLabel', {
+                  defaultMessage: 'What are you building?',
+                })}
+                helpText={
+                  isCustom
+                    ? i18n.translate('xpack.contextEngine.dreamingTemplate.customHelpText', {
+                        defaultMessage: 'Start empty and add your own fact types.',
+                      })
+                    : selected?.description
+                }
               >
-                {error.message}
-              </KbnDangerCallout>
-            ) : step === 'review' && template && config ? (
-              <ReviewStep
-                template={template}
-                config={config}
-                isSaving={isSaving}
-                onBack={() => setStep('describe')}
-                onSkip={continueToAiIndex}
-                onApply={applyAndContinue}
-              />
-            ) : (
-              <DescribeStep
-                templates={templates}
-                isLoading={isLoading}
-                selectedId={selectedId}
-                onSelect={selectTemplate}
-                template={template}
-                templateError={templateError}
-                summary={summary}
-                onSummaryChange={setEditedSummary}
-                onSkip={continueToAiIndex}
-                onNext={() => setStep('review')}
-              />
-            )}
-          </EuiPanel>
-        </div>
+                {isLoading ? (
+                  <EuiSkeletonText lines={2} data-test-subj="contextDreamingTemplatesLoading" />
+                ) : (
+                  <EuiFlexGroup gutterSize="s" wrap responsive={false} role="group">
+                    {templates.map(({ id, name }) => (
+                      <EuiFlexItem grow={false} key={id}>
+                        <Pill
+                          label={name}
+                          isSelected={id === selectedId}
+                          onClick={() => select(id)}
+                          data-test-subj={`contextDreamingTemplateOption-${id}`}
+                        />
+                      </EuiFlexItem>
+                    ))}
+                    <EuiFlexItem grow={false}>
+                      <Pill
+                        label={i18n.translate('xpack.contextEngine.dreamingTemplate.custom', {
+                          defaultMessage: 'Custom',
+                        })}
+                        iconType="plus"
+                        isSelected={isCustom}
+                        onClick={() => select(CUSTOM_TEMPLATE_ID)}
+                        data-test-subj={`contextDreamingTemplateOption-${CUSTOM_TEMPLATE_ID}`}
+                      />
+                    </EuiFlexItem>
+                  </EuiFlexGroup>
+                )}
+              </EuiFormRow>
+              <EuiSpacer size="l" />
+              <EuiFormRow
+                fullWidth
+                label={i18n.translate('xpack.contextEngine.dreamingTemplate.summaryLabel', {
+                  defaultMessage: 'Describe your company, your agent and the knowledge it needs',
+                })}
+                helpText={i18n.translate('xpack.contextEngine.dreamingTemplate.summaryHelpText', {
+                  defaultMessage: 'Your description opens the instructions dreaming follows.',
+                })}
+              >
+                <EuiTextArea
+                  fullWidth
+                  rows={3}
+                  value={summary}
+                  isLoading={!isCustom && !template && !templateError}
+                  onChange={(event) => setEditedSummary(event.target.value)}
+                  data-test-subj="contextDreamingTemplateSummary"
+                />
+              </EuiFormRow>
+              {templateError && (
+                <>
+                  <EuiSpacer size="l" />
+                  <KbnDangerCallout announceOnMount={false} title={loadErrorTitle} size="s">
+                    {templateError.message}
+                  </KbnDangerCallout>
+                </>
+              )}
+              <EuiHorizontalRule margin="xl" />
+              {draft && selectedId ? (
+                <DreamingConfigEditor
+                  draft={draft}
+                  onChange={(next) => setEdited({ id: selectedId, draft: next })}
+                />
+              ) : (
+                <EuiSkeletonText lines={8} />
+              )}
+              <EuiHorizontalRule margin="xl" />
+              <EuiFlexGroup justifyContent="flexEnd" alignItems="center" responsive={false}>
+                <EuiFlexItem grow={false}>
+                  <EuiButtonEmpty
+                    color="text"
+                    onClick={continueToAiIndex}
+                    data-test-subj="contextDreamingTemplateSkip"
+                  >
+                    {i18n.translate('xpack.contextEngine.dreamingTemplate.skipButton', {
+                      defaultMessage: 'Skip for now',
+                    })}
+                  </EuiButtonEmpty>
+                </EuiFlexItem>
+                <EuiFlexItem grow={false}>
+                  <EuiButton
+                    fill
+                    onClick={applyAndContinue}
+                    isLoading={isSaving}
+                    isDisabled={!canApply}
+                    title={
+                      canApply
+                        ? undefined
+                        : i18n.translate('xpack.contextEngine.dreamingTemplate.applyDisabled', {
+                            defaultMessage:
+                              'Add a fact type, or turn on entities, for dreaming to learn something.',
+                          })
+                    }
+                    data-test-subj="contextDreamingTemplateSave"
+                  >
+                    {i18n.translate('xpack.contextEngine.dreamingTemplate.applyButton', {
+                      defaultMessage: 'Turn on dreaming',
+                    })}
+                  </EuiButton>
+                </EuiFlexItem>
+              </EuiFlexGroup>
+            </>
+          )}
+        </EuiPanel>
       </ContextEnginePageSection>
     </ContextEnginePageTemplate>
   );

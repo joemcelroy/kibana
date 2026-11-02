@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import { buildDreamingTemplateConfig } from './dreaming_templates';
+import { buildDreamingTemplateConfig, matchingTemplateId } from './dreaming_templates';
 
 describe('buildDreamingTemplateConfig', () => {
   const template = {
@@ -23,5 +23,24 @@ describe('buildDreamingTemplateConfig', () => {
 
   it('keeps the template instructions when the summary is cleared', () => {
     expect(buildDreamingTemplateConfig(template, ' ').instructions).toBe('Record confirmed fixes.');
+  });
+});
+
+describe('matchingTemplateId', () => {
+  const templates = [
+    { id: 'support', dreaming: { facts: [{ type: 'solution' }, { type: 'policy' }] } },
+    { id: 'legal', dreaming: { facts: [{ type: 'obligation' }, { type: 'policy' }] } },
+  ];
+
+  it('picks the template sharing the most fact types', () => {
+    expect(
+      matchingTemplateId({ facts: [{ type: 'solution' }, { type: 'policy' }] }, templates)
+    ).toBe('support');
+    expect(matchingTemplateId({ facts: [{ type: 'obligation' }] }, templates)).toBe('legal');
+  });
+
+  it('picks none when no fact type matches', () => {
+    expect(matchingTemplateId({ facts: [{ type: 'other' }] }, templates)).toBeUndefined();
+    expect(matchingTemplateId({}, templates)).toBeUndefined();
   });
 });

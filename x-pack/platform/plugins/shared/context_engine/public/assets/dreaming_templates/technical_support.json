@@ -25,70 +25,72 @@
         "description": "A limit on usage, such as \"free tier allows 100 requests per minute per API key\"."
       }
     ],
-    "entities": [
-      {
-        "type": "error",
-        "description": "An error code or message users see.",
-        "attributes": [
-          "code",
-          "message"
-        ]
-      },
-      {
-        "type": "sdk",
-        "description": "A client library, by language and major version.",
-        "attributes": [
-          "language",
-          "version"
-        ]
-      },
-      {
-        "type": "runtime",
-        "description": "A runtime, language version or platform an SDK runs on, such as Node 18.",
-        "attributes": [
-          "version"
-        ]
-      },
-      {
-        "type": "integration",
-        "description": "A way of connecting to the product, such as webhooks, the REST API or an SDK."
-      },
-      {
-        "type": "plan",
-        "description": "A pricing tier with its own limits."
-      }
-    ],
-    "relationships": [
-      {
-        "type": "raised_by",
-        "source": "error",
-        "target": "integration",
-        "description": "The integration returns this error."
-      },
-      {
-        "type": "requires",
-        "source": "sdk",
-        "target": "runtime",
-        "description": "The SDK needs this runtime or a later one."
-      },
-      {
-        "type": "incompatible_with",
-        "source": "sdk",
-        "target": "runtime",
-        "description": "The SDK breaks on this runtime."
-      },
-      {
-        "type": "supersedes",
-        "source": "sdk",
-        "target": "sdk",
-        "description": "The SDK version replaces an older one."
-      },
-      {
-        "type": "limited_by",
-        "source": "integration",
-        "target": "plan",
-        "description": "The plan sets the integration's limits."
-      }
-    ]
+    "entities": {
+      "nodes": [
+        {
+          "type": "error",
+          "description": "An error code or message users see.",
+          "attributes": [
+            "code",
+            "message"
+          ]
+        },
+        {
+          "type": "sdk",
+          "description": "A client library, by language and major version.",
+          "attributes": [
+            "language",
+            "version"
+          ]
+        },
+        {
+          "type": "runtime",
+          "description": "A runtime, language version or platform an SDK runs on, such as Node 18.",
+          "attributes": [
+            "version"
+          ]
+        },
+        {
+          "type": "integration",
+          "description": "A way of connecting to the product, such as webhooks, the REST API or an SDK."
+        },
+        {
+          "type": "plan",
+          "description": "A pricing tier with its own limits."
+        }
+      ],
+      "edges": [
+        {
+          "type": "raised_by",
+          "source": "error",
+          "target": "integration",
+          "description": "The integration returns this error."
+        },
+        {
+          "type": "requires",
+          "source": "sdk",
+          "target": "runtime",
+          "description": "The SDK needs this runtime or a later one."
+        },
+        {
+          "type": "incompatible_with",
+          "source": "sdk",
+          "target": "runtime",
+          "description": "The SDK breaks on this runtime."
+        },
+        {
+          "type": "supersedes",
+          "source": "sdk",
+          "target": "sdk",
+          "description": "The SDK version replaces an older one."
+        },
+        {
+          "type": "limited_by",
+          "source": "integration",
+          "target": "plan",
+          "description": "The plan sets the integration's limits."
+        }
+      ]
+    }
   }
 }

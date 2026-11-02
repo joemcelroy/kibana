@@ -25,66 +25,68 @@
         "description": "An approval or change with its date, such as \"FDA approved semaglutide for obesity treatment in June 2024\"."
       }
     ],
-    "entities": [
-      {
-        "type": "condition",
-        "description": "A disease, condition or risk factor.",
-        "attributes": [
-          "code"
-        ]
-      },
-      {
-        "type": "drug",
-        "description": "A medication or vaccine, by generic name.",
-        "attributes": [
-          "drug_class",
-          "brand_names"
-        ]
-      },
-      {
-        "type": "population",
-        "description": "A group a recommendation applies to, such as adults 60+ or children.",
-        "attributes": [
-          "age_range",
-          "criteria"
-        ]
-      },
-      {
-        "type": "organization",
-        "description": "An issuing or approving body, such as the CDC or FDA."
-      }
-    ],
-    "relationships": [
-      {
-        "type": "treats",
-        "source": "drug",
-        "target": "condition",
-        "description": "The drug is indicated for the condition."
-      },
-      {
-        "type": "contraindicated_in",
-        "source": "drug",
-        "target": "condition",
-        "description": "The drug must not be used with the condition."
-      },
-      {
-        "type": "recommended_for",
-        "source": "drug",
-        "target": "population",
-        "description": "A guideline recommends the drug for the population."
-      },
-      {
-        "type": "approved_by",
-        "source": "drug",
-        "target": "organization",
-        "description": "The body approved the drug, with the indication in the fact."
-      },
-      {
-        "type": "screened_for",
-        "source": "population",
-        "target": "condition",
-        "description": "A protocol recommends screening the population for the condition."
-      }
-    ]
+    "entities": {
+      "nodes": [
+        {
+          "type": "condition",
+          "description": "A disease, condition or risk factor.",
+          "attributes": [
+            "code"
+          ]
+        },
+        {
+          "type": "drug",
+          "description": "A medication or vaccine, by generic name.",
+          "attributes": [
+            "drug_class",
+            "brand_names"
+          ]
+        },
+        {
+          "type": "population",
+          "description": "A group a recommendation applies to, such as adults 60+ or children.",
+          "attributes": [
+            "age_range",
+            "criteria"
+          ]
+        },
+        {
+          "type": "organization",
+          "description": "An issuing or approving body, such as the CDC or FDA."
+        }
+      ],
+      "edges": [
+        {
+          "type": "treats",
+          "source": "drug",
+          "target": "condition",
+          "description": "The drug is indicated for the condition."
+        },
+        {
+          "type": "contraindicated_in",
+          "source": "drug",
+          "target": "condition",
+          "description": "The drug must not be used with the condition."
+        },
+        {
+          "type": "recommended_for",
+          "source": "drug",
+          "target": "population",
+          "description": "A guideline recommends the drug for the population."
+        },
+        {
+          "type": "approved_by",
+          "source": "drug",
+          "target": "organization",
+          "description": "The body approved the drug, with the indication in the fact."
+        },
+        {
+          "type": "screened_for",
+          "source": "population",
+          "target": "condition",
+          "description": "A protocol recommends screening the population for the condition."
+        }
+      ]
+    }
   }
 }

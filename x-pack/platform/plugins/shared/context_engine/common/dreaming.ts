@@ -10,15 +10,15 @@ export const SHORT_TERM_MEMORY_DATA_STREAM = '.contextengine-memory-short-term';
 /** Name of the transcripts data stream. Released names never change. */
 export const TRANSCRIPTS_DATA_STREAM = '.contextengine-memory-transcripts';
 
+/** What fact, entity, relationship and attribute names may be made of. */
+export const DREAMING_TYPE_PATTERN = /^[a-z0-9_]+$/;
+
 export const DREAMING_GROUP_BY = ['session_id', 'user_id'] as const;
 export type DreamingGroupBy = (typeof DREAMING_GROUP_BY)[number];
 
 export const DEFAULT_DREAMING_GROUP_BY: DreamingGroupBy = 'session_id';
 export const DEFAULT_DREAMING_INTERVAL = '24h';
 export const MIN_DREAMING_INTERVAL_MINUTES = 15;
-
-/** Generic fact type used when the dreaming config declares none. */
-export const DEFAULT_DREAMING_FACT_TYPE = 'fact';
 
 /** Type prefixes of the KIs dreaming writes: `fact.<fact type>` and `entity.<entity type>`. */
 export const FACT_TYPE_PREFIX = 'fact.';
@@ -116,6 +116,12 @@ export interface DreamingFactType {
   description?: string;
 }
 
+/**
+ * Attribute keys dreaming writes on every entity for itself, so an entity type can't configure
+ * them: the access pattern queries the ES|QL verifiers check, and the patterns as JSON.
+ */
+export const RESERVED_ENTITY_ATTRIBUTE_KEYS: readonly string[] = ['esql', 'access_patterns'];
+
 export interface DreamingEntityType {
   type: string;
   description?: string;
@@ -129,15 +135,57 @@ export interface DreamingRelationshipType {
   description?: string;
 }
 
+/**
+ * Entity types (nodes) and the relationship types between them (edges). Entities are built only
+ * when `nodes` names at least one type, and relationships only when `edges` does too.
+ */
+export interface DreamingEntities {
+  nodes: DreamingEntityType[];
+  edges?: DreamingRelationshipType[] | null;
+}
+
+/**
+ * What dreaming builds from L0, the short-term memories and transcripts it reads: L1 facts, and
+ * L1 entities with their relationships. A kind with no types configured is off.
+ */
+export interface DreamingL1Types {
+  facts: DreamingFactType[];
+  entities: DreamingEntityType[];
+  relationships: DreamingRelationshipType[];
+}
+
+export const l1TypesOf = ({
+  facts,
+  entities,
+}: Pick<AiIndexDreamingConfig, 'facts' | 'entities'>): DreamingL1Types => {
+  const nodes = entities?.nodes ?? [];
+  return {
+    facts: facts ?? [],
+    entities: nodes,
+    relationships: nodes.length > 0 ? entities?.edges ?? [] : [],
+  };
+};
+
+/**
+ * Attributes dreaming keeps on every L1 fact and entity: how many L0 items it was seen in, and
+ * when it was last seen in one. Each L1 KI cites those L0 items with `derived_from` references.
+ */
+export const OCCURRENCES_ATTRIBUTE = 'memory.number_of_occurrences';
+export const LAST_SEEN_AT_ATTRIBUTE = 'memory.last_seen_at';
+
 /** What a user configures through `PUT .../_dreaming`. */
 export interface AiIndexDreamingConfig {
   enabled: boolean;
   schedule?: { interval: string };
   group_by?: DreamingGroupBy;
   instructions?: string;
-  facts?: DreamingFactType[];
-  entities?: DreamingEntityType[];
-  relationships?: DreamingRelationshipType[];
+  /** Fact types to build. Missing or empty: no facts. */
+  facts?: DreamingFactType[] | null;
+  /**
+   * Entity types and the relationships between them. Missing: no entities. Onboarding builds
+   * facts first and adds entities later.
+   */
+  entities?: DreamingEntities | null;
   /** Also keep one `memory.session` KI per session: a dated summary of what happened in it. */
   sessions?: boolean;
   /**

@@ -25,87 +25,89 @@
         "description": "A change to a policy and when it takes effect, such as \"updated privacy policy effective January 2025\"."
       }
     ],
-    "entities": [
-      {
-        "type": "regulation",
-        "description": "A law, regulation or standard, such as GDPR or SOC 2.",
-        "attributes": [
-          "jurisdiction",
-          "effective_date"
-        ]
-      },
-      {
-        "type": "contract",
-        "description": "A contract or contract template, such as the standard NDA.",
-        "attributes": [
-          "kind",
-          "counterparty",
-          "effective_date",
-          "expiry_date"
-        ]
-      },
-      {
-        "type": "ruling",
-        "description": "A court or regulator decision.",
-        "attributes": [
-          "court",
-          "year",
-          "citation"
-        ]
-      },
-      {
-        "type": "policy",
-        "description": "An internal policy, such as the privacy policy.",
-        "attributes": [
-          "version",
-          "effective_date"
-        ]
-      },
-      {
-        "type": "organization",
-        "description": "A party to a contract, a regulator or a court.",
-        "attributes": [
-          "kind"
-        ]
-      }
-    ],
-    "relationships": [
-      {
-        "type": "governed_by",
-        "source": "contract",
-        "target": "regulation",
-        "description": "The contract must comply with the regulation."
-      },
-      {
-        "type": "party_to",
-        "source": "organization",
-        "target": "contract",
-        "description": "The organization signed the contract."
-      },
-      {
-        "type": "enforces",
-        "source": "organization",
-        "target": "regulation",
-        "description": "The regulator enforces the regulation."
-      },
-      {
-        "type": "interprets",
-        "source": "ruling",
-        "target": "regulation",
-        "description": "The ruling interprets or applies the regulation."
-      },
-      {
-        "type": "implements",
-        "source": "policy",
-        "target": "regulation",
-        "description": "The policy exists to comply with the regulation."
-      },
-      {
-        "type": "supersedes",
-        "source": "policy",
-        "target": "policy",
-        "description": "The policy version replaces an earlier one."
-      }
-    ]
+    "entities": {
+      "nodes": [
+        {
+          "type": "regulation",
+          "description": "A law, regulation or standard, such as GDPR or SOC 2.",
+          "attributes": [
+            "jurisdiction",
+            "effective_date"
+          ]
+        },
+        {
+          "type": "contract",
+          "description": "A contract or contract template, such as the standard NDA.",
+          "attributes": [
+            "kind",
+            "counterparty",
+            "effective_date",
+            "expiry_date"
+          ]
+        },
+        {
+          "type": "ruling",
+          "description": "A court or regulator decision.",
+          "attributes": [
+            "court",
+            "year",
+            "citation"
+          ]
+        },
+        {
+          "type": "policy",
+          "description": "An internal policy, such as the privacy policy.",
+          "attributes": [
+            "version",
+            "effective_date"
+          ]
+        },
+        {
+          "type": "organization",
+          "description": "A party to a contract, a regulator or a court.",
+          "attributes": [
+            "kind"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "governed_by",
+          "source": "contract",
+          "target": "regulation",
+          "description": "The contract must comply with the regulation."
+        },
+        {
+          "type": "party_to",
+          "source": "organization",
+          "target": "contract",
+          "description": "The organization signed the contract."
+        },
+        {
+          "type": "enforces",
+          "source": "organization",
+          "target": "regulation",
+          "description": "The regulator enforces the regulation."
+        },
+        {
+          "type": "interprets",
+          "source": "ruling",
+          "target": "regulation",
+          "description": "The ruling interprets or applies the regulation."
+        },
+        {
+          "type": "implements",
+          "source": "policy",
+          "target": "regulation",
+          "description": "The policy exists to comply with the regulation."
+        },
+        {
+          "type": "supersedes",
+          "source": "policy",
+          "target": "policy",
+          "description": "The policy version replaces an earlier one."
+        }
+      ]
+    }
   }
 }

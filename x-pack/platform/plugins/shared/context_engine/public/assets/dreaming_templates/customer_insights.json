@@ -37,77 +37,92 @@
         "description": "A change or pattern over time, such as \"flights grew 27.9% from 2017 to 2018\" or \"July is the busiest month\"."
       }
     ],
-    "entities": [
-      {
-        "type": "customer",
-        "description": "A loyalty program member, identified by their loyalty number. Keep only what support needs to serve them: their card, where they live by city and province, how they enrolled, and whether they are still a member.",
-        "attributes": [
-          "loyalty_number",
-          "loyalty_card",
-          "city",
-          "province",
-          "enrollment_type",
-          "status"
-        ]
-      },
-      {
-        "type": "loyalty_tier",
-        "description": "A loyalty card tier, such as Star, Nova or Aurora.",
-        "attributes": ["member_count", "churn_rate", "average_clv"]
-      },
-      {
-        "type": "problem",
-        "description": "A kind of problem customers run into, such as missing points, a double charge or a lost upgrade.",
-        "attributes": ["category", "status", "first_reported", "occurrences"]
-      },
-      {
-        "type": "route",
-        "description": "A flight route or destination, such as Toronto to Vancouver.",
-        "attributes": ["origin", "destination"]
-      },
-      {
-        "type": "region",
-        "description": "A province or city members live in.",
-        "attributes": ["country", "member_count"]
-      }
-    ],
-    "relationships": [
-      {
-        "type": "holds",
-        "source": "customer",
-        "target": "loyalty_tier",
-        "description": "The customer's card is in this tier."
-      },
-      {
-        "type": "lives_in",
-        "source": "customer",
-        "target": "region",
-        "description": "The customer lives in this province or city."
-      },
-      {
-        "type": "reported",
-        "source": "customer",
-        "target": "problem",
-        "description": "The customer ran into this problem."
-      },
-      {
-        "type": "affects",
-        "source": "problem",
-        "target": "loyalty_tier",
-        "description": "The problem hits members of this tier."
-      },
-      {
-        "type": "occurs_on",
-        "source": "problem",
-        "target": "route",
-        "description": "The problem happened on this route or flight."
-      },
-      {
-        "type": "duplicate_of",
-        "source": "problem",
-        "target": "problem",
-        "description": "The problem is the same as another, earlier one."
-      }
-    ]
+    "entities": {
+      "nodes": [
+        {
+          "type": "customer",
+          "description": "A loyalty program member, identified by their loyalty number. Keep only what support needs to serve them: their card, where they live by city and province, how they enrolled, and whether they are still a member.",
+          "attributes": [
+            "loyalty_number",
+            "loyalty_card",
+            "city",
+            "province",
+            "enrollment_type",
+            "status"
+          ]
+        },
+        {
+          "type": "loyalty_tier",
+          "description": "A loyalty card tier, such as Star, Nova or Aurora.",
+          "attributes": [
+            "member_count",
+            "churn_rate",
+            "average_clv"
+          ]
+        },
+        {
+          "type": "problem",
+          "description": "A kind of problem customers run into, such as missing points, a double charge or a lost upgrade.",
+          "attributes": [
+            "category",
+            "status"
+          ]
+        },
+        {
+          "type": "route",
+          "description": "A flight route or destination, such as Toronto to Vancouver.",
+          "attributes": [
+            "origin",
+            "destination"
+          ]
+        },
+        {
+          "type": "region",
+          "description": "A province or city members live in.",
+          "attributes": [
+            "country",
+            "member_count"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "holds",
+          "source": "customer",
+          "target": "loyalty_tier",
+          "description": "The customer's card is in this tier."
+        },
+        {
+          "type": "lives_in",
+          "source": "customer",
+          "target": "region",
+          "description": "The customer lives in this province or city."
+        },
+        {
+          "type": "reported",
+          "source": "customer",
+          "target": "problem",
+          "description": "The customer ran into this problem."
+        },
+        {
+          "type": "affects",
+          "source": "problem",
+          "target": "loyalty_tier",
+          "description": "The problem hits members of this tier."
+        },
+        {
+          "type": "occurs_on",
+          "source": "problem",
+          "target": "route",
+          "description": "The problem happened on this route or flight."
+        },
+        {
+          "type": "duplicate_of",
+          "source": "problem",
+          "target": "problem",
+          "description": "The problem is the same as another, earlier one."
+        }
+      ]
+    }
   }
 }

@@ -750,7 +750,7 @@ describe('AiIndexService', () => {
       group_by: 'user_id' as const,
       sessions: true,
       instructions: 'Keep a profile.',
-      entities: [{ type: 'user' }],
+      entities: { nodes: [{ type: 'user' }] },
     };
     const managedDocument: AiIndexDocument = {
       ...aiIndexDocument,

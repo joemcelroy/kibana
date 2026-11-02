@@ -25,58 +25,60 @@
         "description": "A projection and what it assumes, such as \"projected runway is 18 months at current burn rate\"."
       }
     ],
-    "entities": [
-      {
-        "type": "department",
-        "description": "A team or cost center, such as engineering or sales.",
-        "attributes": [
-          "owner"
-        ]
-      },
-      {
-        "type": "report",
-        "description": "A financial report or filing, by period.",
-        "attributes": [
-          "period",
-          "published_date"
-        ]
-      },
-      {
-        "type": "audit",
-        "description": "An audit or compliance review.",
-        "attributes": [
-          "framework",
-          "year",
-          "result"
-        ]
-      },
-      {
-        "type": "financial_metric",
-        "description": "A measure tracked over time, such as revenue, burn rate or headcount.",
-        "attributes": [
-          "unit"
-        ]
-      }
-    ],
-    "relationships": [
-      {
-        "type": "reported_in",
-        "source": "financial_metric",
-        "target": "report",
-        "description": "The report gives a value for the metric."
-      },
-      {
-        "type": "owned_by",
-        "source": "financial_metric",
-        "target": "department",
-        "description": "The department is accountable for the metric."
-      },
-      {
-        "type": "covers",
-        "source": "audit",
-        "target": "department",
-        "description": "The audit reviewed the department."
-      }
-    ]
+    "entities": {
+      "nodes": [
+        {
+          "type": "department",
+          "description": "A team or cost center, such as engineering or sales.",
+          "attributes": [
+            "owner"
+          ]
+        },
+        {
+          "type": "report",
+          "description": "A financial report or filing, by period.",
+          "attributes": [
+            "period",
+            "published_date"
+          ]
+        },
+        {
+          "type": "audit",
+          "description": "An audit or compliance review.",
+          "attributes": [
+            "framework",
+            "year",
+            "result"
+          ]
+        },
+        {
+          "type": "financial_metric",
+          "description": "A measure tracked over time, such as revenue, burn rate or headcount.",
+          "attributes": [
+            "unit"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "reported_in",
+          "source": "financial_metric",
+          "target": "report",
+          "description": "The report gives a value for the metric."
+        },
+        {
+          "type": "owned_by",
+          "source": "financial_metric",
+          "target": "department",
+          "description": "The department is accountable for the metric."
+        },
+        {
+          "type": "covers",
+          "source": "audit",
+          "target": "department",
+          "description": "The audit reviewed the department."
+        }
+      ]
+    }
   }
 }

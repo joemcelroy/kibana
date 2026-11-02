@@ -17,7 +17,7 @@ export const DREAMING_TEMPLATES_ASSET_DIR = 'dreaming_templates';
 /** What a template sets: everything but whether and how often dreaming runs. */
 export type DreamingTemplateConfig = Pick<
   AiIndexDreamingConfig,
-  'group_by' | 'instructions' | 'facts' | 'entities' | 'relationships'
+  'group_by' | 'instructions' | 'facts' | 'entities'
 >;
 
 export interface DreamingTemplateSummary {
@@ -53,4 +53,23 @@ export const buildDreamingTemplateConfig = (
     .filter(Boolean)
     .join('\n\n');
   return { ...template.dreaming, ...(instructions ? { instructions } : {}) };
+};
+
+/**
+ * The template a saved config most likely came from: the one sharing the most fact types with it,
+ * if any. Its entities are suggested when entities are turned on later.
+ */
+export const matchingTemplateId = (
+  config: Pick<AiIndexDreamingConfig, 'facts'>,
+  templates: ReadonlyArray<{ id: string; dreaming: DreamingTemplateConfig }>
+): string | undefined => {
+  const factTypes = new Set((config.facts ?? []).map(({ type }) => type));
+  let best: { id: string; shared: number } | undefined;
+  for (const { id, dreaming } of templates) {
+    const shared = (dreaming.facts ?? []).filter(({ type }) => factTypes.has(type)).length;
+    if (shared > (best?.shared ?? 0)) {
+      best = { id, shared };
+    }
+  }
+  return best?.id;
 };

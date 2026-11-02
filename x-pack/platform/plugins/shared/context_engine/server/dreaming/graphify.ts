@@ -6,7 +6,13 @@
  */
 
 import type { ElasticsearchClient } from '@kbn/core/server';
-import type { AiIndexDreamingConfig, DreamingMemory } from '../../common/dreaming';
+import {
+  ENTITY_TYPE_PREFIX,
+  FACT_TYPE_PREFIX,
+  l1TypesOf,
+  type AiIndexDreamingConfig,
+  type DreamingMemory,
+} from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import type { DreamingMemoryReader } from './memory_reader';
 import {
@@ -73,6 +79,26 @@ export interface GraphifyResult extends ApplyCounts {
 
 const belongsTo = (ki: DreamedKi, userId: string | undefined): boolean =>
   ki.attributes?.[USER_ATTRIBUTE] === userId;
+
+/**
+ * Whether the config builds this KI's L1 kind. Facts or entities left from before their kind was
+ * turned off stay as they are, out of the model's sight.
+ */
+const isBuilt = (config: AiIndexDreamingConfig) => {
+  const { facts, entities } = l1TypesOf(config);
+  return (ki: DreamedKi): boolean =>
+    ki.type.startsWith(FACT_TYPE_PREFIX)
+      ? facts.length > 0
+      : ki.type.startsWith(ENTITY_TYPE_PREFIX)
+      ? entities.length > 0
+      : true;
+};
+
+/** Whether the config builds anything at all: facts, entities, or session documents. */
+const buildsAnything = (config: AiIndexDreamingConfig): boolean => {
+  const { facts, entities } = l1TypesOf(config);
+  return facts.length > 0 || entities.length > 0 || config.sessions === true;
+};
 
 const sessionOfKi = (ki: DreamedKi): string | undefined => {
   const sessionId = ki.attributes?.[SESSION_ATTRIBUTE];
@@ -230,8 +256,9 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
   const newMemories = memories.filter(({ id }) => !alreadyDreamed.has(id));
 
   const owner = ownerOf(task.user_id);
-  const ownerKis = (await loadOwnerKis({ esClient, dest, owner, abortSignal })).filter((ki) =>
-    belongsTo(ki, task.user_id)
+  const built = isBuilt(config);
+  const ownerKis = (await loadOwnerKis({ esClient, dest, owner, abortSignal })).filter(
+    (ki) => belongsTo(ki, task.user_id) && built(ki)
   );
   const sessionKis = config.sessions
     ? (
@@ -266,7 +293,7 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     deleted: counts.deleted + settled.deleted,
   });
 
-  if (newMemories.length === 0 && settled.standing.length === 0) {
+  if ((newMemories.length === 0 && settled.standing.length === 0) || !buildsAnything(config)) {
     if (!dryRun) {
       await runProgress.saveTask(key, taskId, 'done', {
         operations: [],
@@ -295,8 +322,10 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     throw new InvalidChangeSetError(parsed.error.message);
   }
 
-  const sessionByMemoryId = new Map(
-    [...memories, ...settled.sources].map(({ id, session_id: sessionId }) => [id, sessionId])
+  const known = [...memories, ...settled.sources];
+  const sessionByMemoryId = new Map(known.map(({ id, session_id: sessionId }) => [id, sessionId]));
+  const recordedAtByMemoryId = new Map(
+    known.map((memory) => [memory.id, memory.occurred_at ?? memory['@timestamp']])
   );
   const resolved = resolveChangeSet(parsed.data, {
     executionId,
@@ -305,6 +334,7 @@ export const graphifyTask = async (params: GraphifyParams): Promise<GraphifyResu
     vocabulary: vocabularyOf(config),
     memoryIds: new Set(newMemories.map(({ id }) => id)),
     sessionByMemoryId,
+    recordedAtByMemoryId,
     existing: new Map(existing.map((ki) => [ki.id, ki])),
     ...(sessions && { sessions }),
   });

@@ -8,14 +8,16 @@
 import {
   ENTITY_TYPE_PREFIX,
   FACT_TYPE_PREFIX,
+  LAST_SEEN_AT_ATTRIBUTE,
   MAX_DREAMING_PROMPT_CONTENT_LENGTH,
   MAX_DREAMING_PROMPT_TRANSCRIPT_LENGTH,
+  l1TypesOf,
   type AiIndexDreamingConfig,
   type DreamingMemory,
 } from '../../common/dreaming';
 import { accessPatternsOf, baseContent } from './access_patterns';
 import { memoryIdFromUri } from './ids';
-import { ENTITY_ATTRIBUTE_PREFIX, isStale, type DreamedKi } from './long_term';
+import { entityAttributesOf, isStale, occurrencesOf, type DreamedKi } from './long_term';
 
 const MAX_PROMPT_KI_CONTENT_LENGTH = 2000;
 
@@ -23,39 +25,34 @@ const truncate = (value: string, max: number): string =>
   value.length > max ? `${value.slice(0, max)}…` : value;
 
 const describeVocabulary = (config: AiIndexDreamingConfig): string => {
-  const facts =
-    config.facts && config.facts.length > 0
-      ? config.facts
-      : [{ type: 'fact', description: 'Any durable fact worth remembering.' }];
-  const lines = [
-    'FACT TYPES:',
-    ...facts.map(({ type, description }) => `- ${type}${description ? `: ${description}` : ''}`),
-  ];
-  if (config.entities && config.entities.length > 0) {
-    lines.push(
-      'ENTITY TYPES:',
-      ...config.entities.map(
+  const { facts, entities, relationships } = l1TypesOf(config);
+  const section = (title: string, lines: string[], none: string) =>
+    lines.length > 0 ? [`${title}:`, ...lines] : [`${title}: none; ${none}.`];
+  return [
+    ...section(
+      'FACT TYPES',
+      facts.map(({ type, description }) => `- ${type}${description ? `: ${description}` : ''}`),
+      'return no facts'
+    ),
+    ...section(
+      'ENTITY TYPES',
+      entities.map(
         ({ type, description, attributes }) =>
           `- ${type}${description ? `: ${description}` : ''}${
             attributes && attributes.length > 0 ? ` (attributes: ${attributes.join(', ')})` : ''
           }`
-      )
-    );
-  } else {
-    lines.push(
-      'ENTITY TYPES: any, named in lowercase snake_case (for example person, service). No attributes.'
-    );
-  }
-  lines.push(
-    'RELATIONSHIP TYPES:',
-    ...(config.relationships && config.relationships.length > 0
-      ? config.relationships.map(
-          ({ type, source, target, description }) =>
-            `- ${type}: ${source} -> ${target}${description ? ` (${description})` : ''}`
-        )
-      : ['(none; return no relationships)'])
-  );
-  return lines.join('\n');
+      ),
+      'return no entities'
+    ),
+    ...section(
+      'RELATIONSHIP TYPES',
+      relationships.map(
+        ({ type, source, target, description }) =>
+          `- ${type}: ${source} -> ${target}${description ? ` (${description})` : ''}`
+      ),
+      'return no relationships'
+    ),
+  ].join('\n');
 };
 
 const ACCESS_PATTERN_RULES = [
@@ -79,18 +76,54 @@ const SESSION_RULES = [
   'A session document marked stale lost one of its memories: rewrite it from the memories that remain. Do not mention what the lost memory said.',
 ].join('\n');
 
-export const buildSystemPrompt = (config: AiIndexDreamingConfig): string =>
-  [
-    'You consolidate short-term memories into long-term memory: entities, facts about them, and relationships between entities.',
-    'You are given MEMORIES (new, raw notes from conversations) and EXISTING long-term entities and facts.',
+/** What the model builds, in words, for the opening lines. */
+const describeL1 = (facts: boolean, entities: boolean, relationships: boolean): string =>
+  facts && entities
+    ? `entities, facts about them${relationships ? ', and relationships between entities' : ''}`
+    : facts
+    ? 'standalone facts'
+    : `entities${relationships ? ' and relationships between them' : ''}`;
+
+const FACT_RULES = [
+  'Facts are read without their entities, so write each one to stand alone: name the entities it is about in its title and content, and keep every number exactly as stated.',
+];
+
+const RELATIONSHIP_RULES = [
+  'Add a relationship of a configured type whenever the memories support it, so related entities are linked.',
+];
+
+const FACT_AND_ENTITY_RULES = [
+  'List every entity a fact is about in its about field, creating an entity of a configured type if none exists yet.',
+  'Give every entity a content summary of what is known about it: its attribute values and the main facts about it. When you create, update or delete a fact about an entity, update that entity and rewrite its content to match.',
+];
+
+const ENTITY_ONLY_RULES = [
+  'Give every entity a content summary of what is known about it: its attribute values and what the memories say about it. Rewrite it when a memory adds to or corrects it.',
+];
+
+export const buildSystemPrompt = (config: AiIndexDreamingConfig): string => {
+  const types = l1TypesOf(config);
+  const facts = types.facts.length > 0;
+  const entities = types.entities.length > 0;
+  const relationships = types.relationships.length > 0;
+  return [
+    `You consolidate short-term memories into long-term memory: ${describeL1(
+      facts,
+      entities,
+      relationships
+    )}.`,
+    `You are given MEMORIES (new, raw notes from conversations) and EXISTING long-term ${
+      facts && entities ? 'entities and facts' : facts ? 'facts' : 'entities'
+    }.`,
     'A memory has content or a transcript. content is a note an agent chose to remember.',
     "A transcript records one conversation round as it happened: the user's message, the agent's notes, its tool calls with excerpts of their results, and its answer. Take from it only what it states or shows. Record what the user says about themselves and what a tool result shows. The agent's notes and answer can be wrong: do not record a fact only they support.",
     'Return only changes. Update an existing item by repeating its id as ref with the new values; create one with a new key like "new:1"; delete one with delete: true.',
-    'Merge rather than duplicate: if a memory restates or refines an existing fact, update that fact.',
-    'Facts are read without their entities, so write each one to stand alone: name the entities it is about in its title and content, and keep every number exactly as stated.',
-    'List every entity a fact is about in its about field, creating an entity of a configured type if none exists yet.',
-    'Add a relationship of a configured type whenever the memories support it, so related entities are linked.',
-    'Give every entity a content summary of what is known about it: its attribute values and the main facts about it. When you create, update or delete a fact about an entity, update that entity and rewrite its content to match.',
+    'Merge rather than duplicate: if a memory restates or refines an existing item, update that item.',
+    'When a memory restates or confirms an existing item, return its ref with that memory in source_memory_ids even if nothing else changes: that records that it was seen again. Each EXISTING item shows number_of_occurrences, how many memories it was seen in, and last_seen_at, when it was last seen.',
+    ...(facts ? FACT_RULES : []),
+    ...(relationships ? RELATIONSHIP_RULES : []),
+    ...(facts && entities ? FACT_AND_ENTITY_RULES : []),
+    ...(entities && !facts ? ENTITY_ONLY_RULES : []),
     ACCESS_PATTERN_RULES,
     'Every created or updated item must list the MEMORIES it is based on in source_memory_ids.',
     'An item marked stale lost one of its sources. Rewrite it from its remaining sources, delete it if they no longer support it, or leave it out to keep it unchanged.',
@@ -99,6 +132,7 @@ export const buildSystemPrompt = (config: AiIndexDreamingConfig): string =>
     describeVocabulary(config),
     ...(config.instructions ? ['INSTRUCTIONS:', config.instructions] : []),
   ].join('\n\n');
+};
 
 const promptKi = (ki: DreamedKi) => {
   const isEntity = ki.type.startsWith(ENTITY_TYPE_PREFIX);
@@ -114,13 +148,7 @@ const promptKi = (ki: DreamedKi) => {
     ...(content && { content: truncate(content, MAX_PROMPT_KI_CONTENT_LENGTH) }),
     ...(accessPatterns.length > 0 && { access_patterns: accessPatterns }),
     ...(isEntity && {
-      attributes: Object.fromEntries(
-        Object.entries(ki.attributes ?? {}).flatMap(([key, value]) =>
-          key.startsWith(ENTITY_ATTRIBUTE_PREFIX)
-            ? [[key.slice(ENTITY_ATTRIBUTE_PREFIX.length), value]]
-            : []
-        )
-      ),
+      attributes: entityAttributesOf(ki),
       relationships: references
         .filter(({ relation }) => relation === 'relates_to')
         .map(({ type, uri }) => ({ type, target: uri.replace(/^ki:\/\//, '') })),
@@ -133,6 +161,10 @@ const promptKi = (ki: DreamedKi) => {
     source_memory_ids: references.flatMap(({ uri, relation }) => {
       const id = relation === 'derived_from' ? memoryIdFromUri(uri) : undefined;
       return id !== undefined ? [id] : [];
+    }),
+    number_of_occurrences: occurrencesOf(ki),
+    ...(typeof ki.attributes?.[LAST_SEEN_AT_ATTRIBUTE] === 'string' && {
+      last_seen_at: ki.attributes[LAST_SEEN_AT_ATTRIBUTE],
     }),
     ...(isStale(ki) && { stale: true }),
   };

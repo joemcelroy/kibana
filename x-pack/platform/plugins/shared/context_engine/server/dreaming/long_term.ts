@@ -7,7 +7,13 @@
 
 import type { estypes } from '@elastic/elasticsearch';
 import type { ElasticsearchClient } from '@kbn/core/server';
-import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX, SESSION_KI_TYPE } from '../../common/dreaming';
+import {
+  ENTITY_TYPE_PREFIX,
+  FACT_TYPE_PREFIX,
+  OCCURRENCES_ATTRIBUTE,
+  RESERVED_ENTITY_ATTRIBUTE_KEYS,
+  SESSION_KI_TYPE,
+} from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import type { KiReferenceRelation } from '../../common/step_types/ki';
 import { isKiDeleted, type StoredKi } from '../ai_indices/ki_revision';
@@ -15,7 +21,8 @@ import { memoryIdFromUri, memoryUri, ownerIdPrefix, sessionKiId } from './ids';
 
 export const USER_ATTRIBUTE = 'memory.user_id';
 export const SESSION_ATTRIBUTE = 'memory.session_id';
-export const ENTITY_ATTRIBUTE_PREFIX = 'entity.';
+/** Entity attributes were once stored as `entity.<key>`; they are read as `<key>`. */
+const LEGACY_ENTITY_ATTRIBUTE_PREFIX = 'entity.';
 
 /** Most long-term KIs of one owner a task shows the model. */
 export const MAX_OWNER_KIS = 500;
@@ -207,3 +214,42 @@ export const citedMemoryIds = (ki: DreamedKi): string[] =>
     const memoryId = relation === 'derived_from' ? memoryIdFromUri(uri) : undefined;
     return memoryId !== undefined ? [memoryId] : [];
   });
+
+/**
+ * How many L0 items a fact or entity was seen in. KIs written before the count was kept count
+ * the memories they cite.
+ */
+export const occurrencesOf = (ki: DreamedKi | undefined): number => {
+  const stored = ki?.attributes?.[OCCURRENCES_ATTRIBUTE];
+  return typeof stored === 'number' ? stored : ki ? citedMemoryIds(ki).length : 0;
+};
+
+/**
+ * Whether an attribute key is one an entity type configures: dreaming's own keys are dotted
+ * (`memory.user_id`) or reserved, and configured keys can be neither.
+ */
+const isEntityAttributeKey = (key: string): boolean =>
+  !key.includes('.') && !RESERVED_ENTITY_ATTRIBUTE_KEYS.includes(key);
+
+/** An entity's configured attributes by key, reading the old `entity.<key>` form too. */
+export const entityAttributesOf = (ki: DreamedKi | undefined): DreamedKiAttributes => {
+  const attributes: DreamedKiAttributes = {};
+  for (const [key, value] of Object.entries(ki?.attributes ?? {})) {
+    if (key.startsWith(LEGACY_ENTITY_ATTRIBUTE_PREFIX)) {
+      attributes[key.slice(LEGACY_ENTITY_ATTRIBUTE_PREFIX.length)] ??= value;
+    } else if (isEntityAttributeKey(key)) {
+      attributes[key] = value;
+    }
+  }
+  return attributes;
+};
+
+/** A KI's attributes without the old `entity.<key>` ones. */
+export const withoutLegacyEntityAttributes = (
+  attributes: DreamedKiAttributes | undefined
+): DreamedKiAttributes =>
+  Object.fromEntries(
+    Object.entries(attributes ?? {}).filter(
+      ([key]) => !key.startsWith(LEGACY_ENTITY_ATTRIBUTE_PREFIX)
+    )
+  );

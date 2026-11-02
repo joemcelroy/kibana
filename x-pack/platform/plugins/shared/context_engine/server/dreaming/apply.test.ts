@@ -170,4 +170,140 @@ describe('dreaming apply', () => {
 
     expect(putKiRevisionMock).not.toHaveBeenCalled();
   });
+
+  describe('sightings', () => {
+    const fact = (attributes?: DreamedKi['attributes']): DreamedKi => ({
+      id: 'alice/fact-tea',
+      type: 'fact.preference',
+      title: 'Tea',
+      content: 'Bob prefers tea',
+      ...(attributes && { attributes }),
+      references: [{ uri: 'memory://m-1', relation: 'derived_from' }],
+      governance: { lifecycle: { status: 'active' } },
+    });
+
+    const seen = (sourceMemoryIds: string[], lastSeenAt: string) =>
+      applyOperations(context, [
+        {
+          op: 'upsert_fact',
+          id: 'alice/fact-tea',
+          type: 'preference',
+          title: 'Tea',
+          content: 'Bob prefers tea',
+          sourceMemoryIds,
+          sessionIds: ['s-1'],
+          lastSeenAt,
+        },
+      ]);
+
+    it('counts the sources of a new fact and when it was last seen', async () => {
+      findKiRevisionMock.mockResolvedValue(undefined);
+
+      await seen(['m-1', 'm-2'], '2026-10-02T10:00:00.000Z');
+
+      expect(written()[0].attributes).toEqual(
+        expect.objectContaining({
+          'memory.number_of_occurrences': 2,
+          'memory.last_seen_at': '2026-10-02T10:00:00.000Z',
+        })
+      );
+    });
+
+    it('counts only sources the fact does not cite yet, so a retry counts nothing', async () => {
+      findKiRevisionMock.mockResolvedValue(
+        revisionOf(
+          fact({
+            'memory.number_of_occurrences': 4,
+            'memory.last_seen_at': '2026-10-05T10:00:00.000Z',
+          })
+        )
+      );
+
+      await seen(['m-1', 'm-3'], '2026-10-03T10:00:00.000Z');
+
+      expect(written()[0].attributes).toEqual(
+        expect.objectContaining({
+          'memory.number_of_occurrences': 5,
+          'memory.last_seen_at': '2026-10-05T10:00:00.000Z',
+        })
+      );
+    });
+
+    it('starts the count of a fact written before counting from the memories it cites', async () => {
+      findKiRevisionMock.mockResolvedValue(revisionOf(fact()));
+
+      await seen(['m-2'], '2026-10-02T10:00:00.000Z');
+
+      expect(written()[0].attributes?.['memory.number_of_occurrences']).toBe(2);
+    });
+
+    it('counts a relationship source as a sighting of its source entity', async () => {
+      findKiRevisionMock.mockResolvedValue(revisionOf(ki('active', ['m-1'])));
+
+      await applyOperations(context, [
+        {
+          op: 'relationship',
+          sourceId: 'alice/entity-person-bob',
+          targetId: 'alice/entity-team-platform',
+          type: 'member_of',
+          remove: false,
+          sourceMemoryIds: ['m-2'],
+          lastSeenAt: '2026-10-02T10:00:00.000Z',
+        },
+      ]);
+
+      expect(written()[0].attributes).toEqual({
+        'memory.number_of_occurrences': 2,
+        'memory.last_seen_at': '2026-10-02T10:00:00.000Z',
+      });
+    });
+
+    it('no longer counts a forgotten source', async () => {
+      findKiRevisionMock.mockResolvedValue(
+        revisionOf({
+          ...fact({ 'memory.number_of_occurrences': 3 }),
+          references: [
+            { uri: 'memory://m-1', relation: 'derived_from' },
+            { uri: 'memory://m-2', relation: 'derived_from' },
+          ],
+        })
+      );
+
+      await pruneSources(context, 'alice/fact-tea', new Set(['m-1']));
+
+      expect(written()[0].attributes?.['memory.number_of_occurrences']).toBe(2);
+    });
+  });
+
+  it('stores entity attributes by their own names, moving old entity.<key> ones over', async () => {
+    findKiRevisionMock.mockResolvedValue(
+      revisionOf({
+        ...ki('active'),
+        attributes: {
+          'entity.region': 'EU',
+          'entity.category': 'Billing',
+          'memory.user_id': 'alice',
+        },
+      })
+    );
+
+    await applyOperations(context, [
+      {
+        op: 'upsert_entity',
+        id: 'alice/entity-person-bob',
+        type: 'person',
+        name: 'Bob',
+        attributes: { category: 'Flight Disruption' },
+        sourceMemoryIds: ['m-1'],
+        sessionIds: ['s-1'],
+      },
+    ]);
+
+    expect(written()[0].attributes).toEqual({
+      region: 'EU',
+      category: 'Flight Disruption',
+      'memory.user_id': 'alice',
+      'memory.number_of_occurrences': 2,
+    });
+  });
 });

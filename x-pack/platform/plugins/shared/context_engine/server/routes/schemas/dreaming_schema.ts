@@ -8,6 +8,7 @@
 import { schema } from '@kbn/config-schema';
 import {
   DREAMING_GROUP_BY,
+  DREAMING_TYPE_PATTERN,
   MAX_DREAMING_ENTITY_ATTRIBUTES,
   MAX_DREAMING_ENTITY_TYPES,
   MAX_DREAMING_FACT_TYPES,
@@ -24,9 +25,9 @@ import {
   MAX_SHORT_TERM_SESSION_ID_LENGTH,
   MAX_SHORT_TERM_USER_ID_LENGTH,
   MIN_DREAMING_INTERVAL_MINUTES,
+  RESERVED_ENTITY_ATTRIBUTE_KEYS,
 } from '../../../common/dreaming';
 import { validateFeedbackAnalysisInterval } from '../../../common/validation';
-import { DREAMING_TYPE_PATTERN } from '../../dreaming/resolve_change_set';
 
 const MAX_EXECUTION_ID_LENGTH = 256;
 export const MAX_TIMESTAMP_LENGTH = 64;
@@ -43,6 +44,16 @@ const typeSchema = schema.string({
   minLength: 1,
   maxLength: MAX_DREAMING_TYPE_LENGTH,
   validate: validateType,
+});
+
+const attributeKeySchema = schema.string({
+  minLength: 1,
+  maxLength: MAX_DREAMING_TYPE_LENGTH,
+  validate: (value) =>
+    validateType(value) ??
+    (RESERVED_ENTITY_ATTRIBUTE_KEYS.includes(value)
+      ? `'${value}' is kept for dreaming's own use.`
+      : undefined),
 });
 
 const typeDescriptionSchema = schema.maybe(
@@ -76,31 +87,63 @@ export const dreamingConfigSchema = schema.object({
     })
   ),
   facts: schema.maybe(
-    schema.arrayOf(schema.object({ type: typeSchema, description: typeDescriptionSchema }), {
-      maxSize: MAX_DREAMING_FACT_TYPES,
-    })
-  ),
-  entities: schema.maybe(
-    schema.arrayOf(
-      schema.object({
-        type: typeSchema,
-        description: typeDescriptionSchema,
-        attributes: schema.maybe(
-          schema.arrayOf(typeSchema, { maxSize: MAX_DREAMING_ENTITY_ATTRIBUTES })
-        ),
-      }),
-      { maxSize: MAX_DREAMING_ENTITY_TYPES }
+    schema.nullable(
+      schema.arrayOf(schema.object({ type: typeSchema, description: typeDescriptionSchema }), {
+        maxSize: MAX_DREAMING_FACT_TYPES,
+        meta: { description: 'Fact types to build (`fact.*`). Missing or empty: no facts.' },
+      })
     )
   ),
-  relationships: schema.maybe(
-    schema.arrayOf(
-      schema.object({
-        type: typeSchema,
-        source: typeSchema,
-        target: typeSchema,
-        description: typeDescriptionSchema,
-      }),
-      { maxSize: MAX_DREAMING_RELATIONSHIP_TYPES }
+  entities: schema.maybe(
+    schema.nullable(
+      schema.object(
+        {
+          nodes: schema.arrayOf(
+            schema.object({
+              type: typeSchema,
+              description: typeDescriptionSchema,
+              attributes: schema.maybe(
+                schema.arrayOf(attributeKeySchema, {
+                  maxSize: MAX_DREAMING_ENTITY_ATTRIBUTES,
+                  meta: {
+                    description:
+                      'Attribute keys, stored on the entity as they are, for example `category`.',
+                  },
+                })
+              ),
+            }),
+            {
+              maxSize: MAX_DREAMING_ENTITY_TYPES,
+              meta: { description: 'Entity types to build (`entity.*`). Empty: no entities.' },
+            }
+          ),
+          edges: schema.maybe(
+            schema.nullable(
+              schema.arrayOf(
+                schema.object({
+                  type: typeSchema,
+                  source: typeSchema,
+                  target: typeSchema,
+                  description: typeDescriptionSchema,
+                }),
+                {
+                  maxSize: MAX_DREAMING_RELATIONSHIP_TYPES,
+                  meta: {
+                    description:
+                      'Relationship types between entity types. Missing or empty: no relationships.',
+                  },
+                }
+              )
+            )
+          ),
+        },
+        {
+          meta: {
+            description:
+              'Entity types (nodes) and the relationships between them (edges). Missing or null: no entities.',
+          },
+        }
+      )
     )
   ),
   sessions: schema.maybe(

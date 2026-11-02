@@ -33,8 +33,10 @@ const SUPPORT = {
   dreaming: {
     instructions: 'Record confirmed fixes.',
     facts: [{ type: 'solution', description: 'A confirmed fix.' }],
-    entities: [{ type: 'issue', description: 'A known problem.', attributes: ['severity'] }],
-    relationships: [{ type: 'duplicate_of', source: 'issue', target: 'issue' }],
+    entities: {
+      nodes: [{ type: 'issue', description: 'A known problem.', attributes: ['severity'] }],
+      edges: [{ type: 'duplicate_of', source: 'issue', target: 'issue' }],
+    },
   },
 };
 
@@ -44,8 +46,10 @@ const LEGAL = {
   dreaming: {
     instructions: 'Record obligations.',
     facts: [{ type: 'obligation' }],
-    entities: [{ type: 'contract' }],
-    relationships: [{ type: 'supersedes', source: 'contract', target: 'contract' }],
+    entities: {
+      nodes: [{ type: 'contract' }],
+      edges: [{ type: 'supersedes', source: 'contract', target: 'contract' }],
+    },
   },
 };
 
@@ -95,13 +99,16 @@ const continuedToAiIndex = {
   state: AI_INDEX_CREATED_LOCATION_STATE,
 };
 
-const proposeOntology = async () => {
-  await waitFor(() => expect(screen.getByTestId('contextDreamingTemplateNext')).toBeEnabled());
-  fireEvent.click(screen.getByTestId('contextDreamingTemplateNext'));
-};
+const pickedExample = async () =>
+  waitFor(() =>
+    expect(screen.getByTestId('contextDreamingConfigFact-solution')).toBeInTheDocument()
+  );
+
+const putBody = (services: ReturnType<typeof renderPage>) =>
+  JSON.parse(((services.http.put.mock.calls[0] as unknown[])[1] as { body: string }).body);
 
 describe('DreamingTemplatePage', () => {
-  it('lists the examples from the static JSON, starting from the first', async () => {
+  it('lists the examples and Custom, starting from the first, with its facts and entities off', async () => {
     const services = renderPage();
 
     expect(
@@ -111,10 +118,13 @@ describe('DreamingTemplatePage', () => {
       'aria-pressed',
       'true'
     );
-    expect(await screen.findByTestId('contextDreamingTemplateGraph')).toHaveTextContent('ISSUE');
+    expect(screen.getByTestId('contextDreamingTemplateOption-custom')).toBeInTheDocument();
+    await pickedExample();
     expect(screen.getByTestId('contextDreamingTemplateSummary')).toHaveValue(
       'Customer support knowledge base.'
     );
+    expect(screen.getByTestId('contextDreamingConfigEntitiesSwitch')).not.toBeChecked();
+    expect(screen.queryByTestId('contextDreamingConfigEntities')).not.toBeInTheDocument();
     expect(services.http.get).toHaveBeenCalledWith(
       '/assets/dreaming_templates/index.json',
       expect.objectContaining({ prependBasePath: false })
@@ -123,48 +133,27 @@ describe('DreamingTemplatePage', () => {
 
   it('keeps an edited description until another example is picked', async () => {
     renderPage();
+    await pickedExample();
 
-    const summary = await screen.findByTestId('contextDreamingTemplateSummary');
-    await waitFor(() => expect(summary).toHaveValue('Customer support knowledge base.'));
-    fireEvent.change(summary, { target: { value: 'Acme billing support.' } });
-    expect(summary).toHaveValue('Acme billing support.');
+    fireEvent.change(screen.getByTestId('contextDreamingTemplateSummary'), {
+      target: { value: 'Acme support.' },
+    });
+    expect(screen.getByTestId('contextDreamingTemplateSummary')).toHaveValue('Acme support.');
 
     fireEvent.click(screen.getByTestId('contextDreamingTemplateOption-legal_assistant'));
     await waitFor(() =>
       expect(screen.getByTestId('contextDreamingTemplateSummary')).toHaveValue('Legal knowledge.')
     );
+    expect(screen.getByTestId('contextDreamingConfigFact-obligation')).toBeInTheDocument();
   });
 
-  it("proposes the picked example's ontology, with the edited description opening the instructions", async () => {
-    renderPage();
-
-    fireEvent.change(await screen.findByTestId('contextDreamingTemplateSummary'), {
-      target: { value: 'Acme customer support knowledge base.' },
-    });
-    await proposeOntology();
-
-    expect(screen.getByTestId('contextDreamingTemplateRationale')).toHaveTextContent(
-      'Support knowledge centers on issues.'
-    );
-    expect(screen.getByTestId('contextDreamingTemplateFact-solution')).toHaveTextContent(
-      'A confirmed fix.'
-    );
-    expect(screen.getByTestId('contextDreamingTemplateEntity-issue')).toHaveTextContent('severity');
-    expect(
-      screen.getByTestId('contextDreamingTemplateRelationship-duplicate_of')
-    ).toHaveTextContent('issue → issue');
-    expect(screen.getByTestId('contextDreamingTemplateInstructions')).toHaveTextContent(
-      'Acme customer support knowledge base. Record confirmed fixes.'
-    );
-  });
-
-  it('applies the example, turning dreaming on, then continues to the AI index', async () => {
+  it('turns dreaming on with the facts only while entities are off', async () => {
     const services = renderPage();
+    await pickedExample();
 
-    fireEvent.change(await screen.findByTestId('contextDreamingTemplateSummary'), {
+    fireEvent.change(screen.getByTestId('contextDreamingTemplateSummary'), {
       target: { value: 'Acme customer support knowledge base.' },
     });
-    await proposeOntology();
     fireEvent.click(screen.getByTestId('contextDreamingTemplateSave'));
 
     await waitFor(() =>
@@ -175,34 +164,65 @@ describe('DreamingTemplatePage', () => {
     );
     expect(services.http.put).toHaveBeenCalledWith(
       '/api/context_engine/ai_index/tickets/_dreaming',
-      {
-        version: '2023-10-31',
-        body: JSON.stringify({
-          enabled: true,
-          ...SUPPORT.dreaming,
-          instructions: 'Acme customer support knowledge base.\n\nRecord confirmed fixes.',
-        }),
-      }
+      expect.objectContaining({ version: '2023-10-31' })
     );
+    expect(putBody(services)).toEqual({
+      enabled: true,
+      instructions: 'Acme customer support knowledge base.\n\nRecord confirmed fixes.',
+      facts: SUPPORT.dreaming.facts,
+      entities: null,
+    });
   });
 
-  it('goes back to the examples, keeping what was typed', async () => {
-    renderPage();
+  it('suggests the example’s entities and relationships when they are turned on, and saves them', async () => {
+    const services = renderPage();
+    await pickedExample();
 
-    fireEvent.change(await screen.findByTestId('contextDreamingTemplateSummary'), {
-      target: { value: 'Billing support.' },
+    fireEvent.click(screen.getByTestId('contextDreamingConfigEntitiesSwitch'));
+    expect(screen.getByTestId('contextDreamingConfigEntity-issue')).toHaveTextContent('severity');
+    expect(screen.getByTestId('contextDreamingConfigRelationship-duplicate_of')).toHaveTextContent(
+      'issue → issue'
+    );
+    fireEvent.click(screen.getByTestId('contextDreamingTemplateSave'));
+
+    await waitFor(() => expect(services.http.put).toHaveBeenCalled());
+    expect(putBody(services).entities).toEqual(SUPPORT.dreaming.entities);
+  });
+
+  it('starts Custom empty, and turns dreaming on once a fact type is added', async () => {
+    const services = renderPage();
+    await pickedExample();
+
+    fireEvent.click(screen.getByTestId('contextDreamingTemplateOption-custom'));
+    expect(screen.getByTestId('contextDreamingTemplateSummary')).toHaveValue('');
+    expect(screen.getByTestId('contextDreamingConfigFacts-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('contextDreamingTemplateSave')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('contextDreamingConfigFacts-add'));
+    fireEvent.change(screen.getByTestId('contextDreamingTypeModalName'), {
+      target: { value: 'Incident Cause' },
     });
-    await proposeOntology();
-    fireEvent.click(screen.getByTestId('contextDreamingTemplateBack'));
+    fireEvent.click(screen.getByTestId('contextDreamingTypeModalSave'));
+    expect(screen.getByTestId('contextDreamingConfigFact-incident_cause')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('contextDreamingTemplateSummary'), {
+      target: { value: 'Incident reviews.' },
+    });
+    fireEvent.click(screen.getByTestId('contextDreamingTemplateSave'));
 
-    expect(screen.getByTestId('contextDreamingTemplateSummary')).toHaveValue('Billing support.');
+    await waitFor(() => expect(services.http.put).toHaveBeenCalled());
+    expect(putBody(services)).toEqual({
+      enabled: true,
+      facts: [{ type: 'incident_cause' }],
+      entities: null,
+      instructions: 'Incident reviews.',
+    });
   });
 
   it('stays on the page when saving fails', async () => {
     const services = renderPage();
     services.http.put.mockRejectedValue(new Error('Forbidden'));
+    await pickedExample();
 
-    await proposeOntology();
     fireEvent.click(screen.getByTestId('contextDreamingTemplateSave'));
 
     await waitFor(() => expect(services.notifications.toasts.addError).toHaveBeenCalled());

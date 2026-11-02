@@ -55,20 +55,6 @@ export const USER_MEMORIES_DREAMING: ManagedDreamingConfig = {
   sessions: true,
   rounds: true,
   instructions: PROFILE_INSTRUCTIONS,
-  entities: [
-    {
-      type: 'user',
-      description: `The person the memories are about. Exactly one, named "${USER_PROFILE_ENTITY_NAME}".`,
-      attributes: ['name', 'role', 'organization', 'team', 'location'],
-    },
-    {
-      type: 'person',
-      description: 'Someone the user works with or mentions, by full name.',
-      attributes: ['role', 'relationship'],
-    },
-    { type: 'project', description: 'A project, product or initiative the user works on.' },
-    { type: 'organization', description: 'A company, team or group the user deals with.' },
-  ],
   facts: [
     { type: 'work_context', description: 'Their role, responsibilities and how they work.' },
     { type: 'personal_context', description: 'Personal details they chose to share.' },
@@ -76,11 +62,27 @@ export const USER_MEMORIES_DREAMING: ManagedDreamingConfig = {
     { type: 'top_of_mind', description: 'Something they are focused on now, with its date.' },
     { type: 'history', description: 'Something they did or decided in the past, with its date.' },
   ],
-  relationships: [
-    { type: 'works_with', source: 'user', target: 'person' },
-    { type: 'works_on', source: 'user', target: 'project' },
-    { type: 'member_of', source: 'user', target: 'organization' },
-  ],
+  entities: {
+    nodes: [
+      {
+        type: 'user',
+        description: `The person the memories are about. Exactly one, named "${USER_PROFILE_ENTITY_NAME}".`,
+        attributes: ['name', 'role', 'organization', 'team', 'location'],
+      },
+      {
+        type: 'person',
+        description: 'Someone the user works with or mentions, by full name.',
+        attributes: ['role', 'relationship'],
+      },
+      { type: 'project', description: 'A project, product or initiative the user works on.' },
+      { type: 'organization', description: 'A company, team or group the user deals with.' },
+    ],
+    edges: [
+      { type: 'works_with', source: 'user', target: 'person' },
+      { type: 'works_on', source: 'user', target: 'project' },
+      { type: 'member_of', source: 'user', target: 'organization' },
+    ],
+  },
 };
 
 /**

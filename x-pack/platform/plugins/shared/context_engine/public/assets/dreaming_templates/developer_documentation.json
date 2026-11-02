@@ -25,61 +25,63 @@
         "description": "A size, rate or count limit, such as \"max payload size is 10MB, max batch size is 100 items\"."
       }
     ],
-    "entities": [
-      {
-        "type": "api_endpoint",
-        "description": "An HTTP endpoint, by method and path.",
-        "attributes": [
-          "method",
-          "path",
-          "version"
-        ]
-      },
-      {
-        "type": "resource",
-        "description": "A kind of object the API manages, such as documents or users."
-      },
-      {
-        "type": "component",
-        "description": "A service, queue or store in the architecture, such as Kafka.",
-        "attributes": [
-          "technology"
-        ]
-      },
-      {
-        "type": "credential",
-        "description": "A way to authenticate, such as an API key or OAuth token.",
-        "attributes": [
-          "scope",
-          "header"
-        ]
-      }
-    ],
-    "relationships": [
-      {
-        "type": "operates_on",
-        "source": "api_endpoint",
-        "target": "resource",
-        "description": "The endpoint creates, reads, updates or deletes the resource."
-      },
-      {
-        "type": "authenticated_by",
-        "source": "api_endpoint",
-        "target": "credential",
-        "description": "The endpoint accepts this credential."
-      },
-      {
-        "type": "handled_by",
-        "source": "api_endpoint",
-        "target": "component",
-        "description": "The component processes the endpoint's requests."
-      },
-      {
-        "type": "depends_on",
-        "source": "component",
-        "target": "component",
-        "description": "The component needs another one to work."
-      }
-    ]
+    "entities": {
+      "nodes": [
+        {
+          "type": "api_endpoint",
+          "description": "An HTTP endpoint, by method and path.",
+          "attributes": [
+            "method",
+            "path",
+            "version"
+          ]
+        },
+        {
+          "type": "resource",
+          "description": "A kind of object the API manages, such as documents or users."
+        },
+        {
+          "type": "component",
+          "description": "A service, queue or store in the architecture, such as Kafka.",
+          "attributes": [
+            "technology"
+          ]
+        },
+        {
+          "type": "credential",
+          "description": "A way to authenticate, such as an API key or OAuth token.",
+          "attributes": [
+            "scope",
+            "header"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "type": "operates_on",
+          "source": "api_endpoint",
+          "target": "resource",
+          "description": "The endpoint creates, reads, updates or deletes the resource."
+        },
+        {
+          "type": "authenticated_by",
+          "source": "api_endpoint",
+          "target": "credential",
+          "description": "The endpoint accepts this credential."
+        },
+        {
+          "type": "handled_by",
+          "source": "api_endpoint",
+          "target": "component",
+          "description": "The component processes the endpoint's requests."
+        },
+        {
+          "type": "depends_on",
+          "source": "component",
+          "target": "component",
+          "description": "The component needs another one to work."
+        }
+      ]
+    }
   }
 }

@@ -93,7 +93,7 @@ const setup = ({
     executionId: 'exec-1',
     taskId: 'task-1',
     dest: { type: 'index', value: 'ai-index-idx-memory' },
-    config: { enabled: true },
+    config: { enabled: true, facts: [{ type: 'fact' }] },
     dryRun: false,
     esClient: elasticsearchServiceMock.createElasticsearchClient(),
     memoryReader: memoryReader as unknown as DreamingMemoryReader,
@@ -165,6 +165,15 @@ describe('graphifyTask', () => {
     expect(operations).toEqual([
       expect.objectContaining({ accessPatterns: [pattern('orders', 'item')] }),
     ]);
+  });
+
+  it('asks the model nothing when the config builds no facts, entities or sessions', async () => {
+    const { params, model } = setup();
+
+    const result = await graphifyTask({ ...params, config: { enabled: true, entities: null } });
+
+    expect(model).not.toHaveBeenCalled();
+    expect(result.status).toBe('unchanged');
   });
 
   it('re-applies a saved plan without asking the model again', async () => {

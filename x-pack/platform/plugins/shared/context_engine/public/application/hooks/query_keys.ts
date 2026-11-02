@@ -47,6 +47,7 @@ export const contextEngineQueryKeys = {
   },
   dreamingTemplates: {
     list: () => ['context_engine', 'dreaming_templates', 'list'] as const,
+    all: () => ['context_engine', 'dreaming_templates', 'all'] as const,
     detail: (id: string) => ['context_engine', 'dreaming_templates', id] as const,
   },
   connectors: {

@@ -38,13 +38,19 @@ const context = (overrides: Partial<GraphifyTaskContext> = {}): GraphifyTaskCont
   vocabulary: vocabularyOf({
     enabled: true,
     facts: [{ type: 'preference' }],
-    entities: [{ type: 'person', attributes: ['role'] }, { type: 'team' }],
-    relationships: [{ type: 'member_of', source: 'person', target: 'team' }],
+    entities: {
+      nodes: [{ type: 'person', attributes: ['role'] }, { type: 'team' }],
+      edges: [{ type: 'member_of', source: 'person', target: 'team' }],
+    },
   }),
   memoryIds: new Set(['m-1', 'm-2']),
   sessionByMemoryId: new Map([
     ['m-1', 's-1'],
     ['m-2', 's-1'],
+  ]),
+  recordedAtByMemoryId: new Map([
+    ['m-1', '2026-10-01T10:00:00.000Z'],
+    ['m-2', '2026-10-02T10:00:00.000Z'],
   ]),
   existing: new Map([
     [existingEntity.id, existingEntity],
@@ -210,25 +216,21 @@ describe('resolveChangeSet', () => {
     expect(rejected).toHaveLength(1);
   });
 
-  it('allows any entity type and only the default fact type when nothing is configured', () => {
+  it('builds nothing when no types are configured', () => {
     const { operations, rejected } = resolveChangeSet(
       changeSet({
         entities: [{ ref: 'new:1', type: 'service', name: 'checkout', source_memory_ids: ['m-1'] }],
         facts: [
           { ref: 'new:2', type: 'fact', title: 't', content: 'c', source_memory_ids: ['m-1'] },
-          {
-            ref: 'new:3',
-            type: 'preference',
-            title: 't',
-            content: 'c',
-            source_memory_ids: ['m-1'],
-          },
         ],
       }),
-      context({ vocabulary: vocabularyOf({ enabled: true }) })
+      context({ vocabulary: vocabularyOf({ enabled: true, facts: [], entities: null }) })
     );
-    expect(operations.map(({ op }) => op)).toEqual(['upsert_entity', 'upsert_fact']);
-    expect(rejected.map(({ item }) => item)).toEqual(['fact new:3']);
+    expect(operations).toEqual([]);
+    expect(rejected.map(({ reason }) => reason)).toEqual([
+      'this AI index does not build entities',
+      'this AI index does not build facts',
+    ]);
   });
 
   it('clears the stale flag on stale KIs the model left out', () => {
@@ -336,6 +338,95 @@ describe('resolveChangeSet', () => {
         context({ sessions: new Map([['s-1', stale]]) })
       );
       expect(operations).toEqual([{ op: 'clear_stale', id: stale.id }]);
+    });
+  });
+
+  describe('L1 types', () => {
+    const facts = [{ type: 'preference' }];
+    const entities = {
+      nodes: [{ type: 'person' }, { type: 'team' }],
+      edges: [{ type: 'member_of', source: 'person', target: 'team' }],
+    };
+
+    const everything = changeSet({
+      entities: [{ ref: 'new:1', type: 'team', name: 'Platform', source_memory_ids: ['m-1'] }],
+      facts: [
+        {
+          ref: 'new:2',
+          type: 'preference',
+          title: 'Tea',
+          content: 'Bob prefers tea',
+          about: [existingEntity.id],
+          source_memory_ids: ['m-2'],
+        },
+      ],
+      relationships: [
+        {
+          type: 'member_of',
+          source: existingEntity.id,
+          target: 'new:1',
+          source_memory_ids: ['m-1'],
+        },
+      ],
+    });
+
+    it('builds facts only, without about, while entities are not configured', () => {
+      const { operations, rejected } = resolveChangeSet(
+        everything,
+        context({ vocabulary: vocabularyOf({ enabled: true, facts, entities: null }) })
+      );
+
+      expect(operations).toEqual([expect.objectContaining({ op: 'upsert_fact', title: 'Tea' })]);
+      expect(operations[0]).not.toHaveProperty('about');
+      expect(rejected.map(({ reason }) => reason)).toEqual([
+        'this AI index does not build entities',
+        'this AI index does not build relationships',
+      ]);
+    });
+
+    it('builds entities and relationships only while facts are empty', () => {
+      const { operations, rejected } = resolveChangeSet(
+        everything,
+        context({ vocabulary: vocabularyOf({ enabled: true, facts: [], entities }) })
+      );
+
+      expect(operations.map(({ op }) => op)).toEqual(['upsert_entity', 'relationship']);
+      expect(rejected).toEqual([
+        { item: 'fact new:2', reason: 'this AI index does not build facts' },
+      ]);
+    });
+
+    it('builds entities without relationships while edges are empty', () => {
+      const { operations, rejected } = resolveChangeSet(
+        everything,
+        context({
+          vocabulary: vocabularyOf({ enabled: true, facts, entities: { ...entities, edges: [] } }),
+        })
+      );
+
+      expect(operations.map(({ op }) => op)).toEqual(['upsert_entity', 'upsert_fact']);
+      expect(rejected.map(({ reason }) => reason)).toEqual([
+        'this AI index does not build relationships',
+      ]);
+    });
+
+    it('records when the latest source of each item was recorded', () => {
+      const { operations } = resolveChangeSet(
+        changeSet({
+          facts: [
+            {
+              ref: 'new:1',
+              type: 'preference',
+              title: 'Tea',
+              content: 'Bob prefers tea',
+              source_memory_ids: ['m-2', 'm-1'],
+            },
+          ],
+        }),
+        context()
+      );
+
+      expect((operations[0] as UpsertFactOperation).lastSeenAt).toBe('2026-10-02T10:00:00.000Z');
     });
   });
 });

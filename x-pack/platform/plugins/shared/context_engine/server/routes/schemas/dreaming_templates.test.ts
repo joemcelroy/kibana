@@ -40,19 +40,38 @@ describe('dreaming templates', () => {
     });
 
     it('relates only entity types it defines', () => {
-      const entityTypes = new Set((dreaming.entities ?? []).map(({ type }) => type));
-      for (const { source, target } of dreaming.relationships ?? []) {
+      const entityTypes = new Set((dreaming.entities?.nodes ?? []).map(({ type }) => type));
+      for (const { source, target } of dreaming.entities?.edges ?? []) {
         expect(entityTypes).toContain(source);
         expect(entityTypes).toContain(target);
       }
     });
 
     it('has facts, entities and relationships, each type once', () => {
-      for (const kinds of [dreaming.facts, dreaming.entities, dreaming.relationships]) {
+      for (const kinds of [dreaming.facts, dreaming.entities?.nodes, dreaming.entities?.edges]) {
         const types = (kinds ?? []).map(({ type }) => type);
         expect(types.length).toBeGreaterThan(0);
         expect(new Set(types).size).toBe(types.length);
       }
     });
+  });
+});
+
+describe('dreaming config attributes', () => {
+  it('refuses attribute keys dreaming keeps for itself', () => {
+    for (const key of ['esql', 'access_patterns']) {
+      expect(() =>
+        dreamingConfigSchema.validate({
+          enabled: true,
+          entities: { nodes: [{ type: 'problem', attributes: [key] }] },
+        })
+      ).toThrow("is kept for dreaming's own use");
+    }
+    expect(() =>
+      dreamingConfigSchema.validate({
+        enabled: true,
+        entities: { nodes: [{ type: 'problem', attributes: ['category'] }] },
+      })
+    ).not.toThrow();
   });
 });

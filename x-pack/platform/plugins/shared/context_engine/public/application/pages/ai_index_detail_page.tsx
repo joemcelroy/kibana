@@ -345,7 +345,9 @@ export const AiIndexDetailPage = () => {
         {aiIndex ? <ListKiPanel aiIndex={aiIndex} discoverHref={discoverHref} /> : null}
       </Route>
       <Route path={CONTEXT_ENGINE_PATHS.detailSettings} exact>
-        {resolvedAiIndexId ? <DreamingPanel aiIndexId={resolvedAiIndexId} /> : null}
+        {resolvedAiIndexId ? (
+          <DreamingPanel aiIndexId={resolvedAiIndexId} managed={aiIndex?.managed} />
+        ) : null}
       </Route>
       <Route path={CONTEXT_ENGINE_PATHS.detail} exact>
         {overviewTabContent}

@@ -930,7 +930,7 @@ describe('AiIndexDetailPage', () => {
     );
   });
 
-  it('shows the dreaming config as JSON on the Settings tab', async () => {
+  it('shows the dreaming config on the Settings tab, with its JSON in a modal', async () => {
     const dreaming = {
       enabled: true,
       group_by: 'user_id',
@@ -970,6 +970,8 @@ describe('AiIndexDetailPage', () => {
     fireEvent.click(await screen.findByTestId('contextAiIndexDetailTab-settings'));
 
     expect(history.location.pathname).toBe(getAiIndexSettingsPath(aiIndex.id));
+    expect(await screen.findByTestId('contextDreamingConfigEditor')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('contextAiIndexDreamingViewJson'));
     const json = await screen.findByTestId('contextAiIndexDreamingJson');
     expect(json).toHaveTextContent('"group_by": "user_id"');
     expect(json).toHaveTextContent('"memory_id": "m-1"');

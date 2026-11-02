@@ -6,9 +6,10 @@
  */
 
 import {
-  DEFAULT_DREAMING_FACT_TYPE,
+  DREAMING_TYPE_PATTERN,
   ENTITY_TYPE_PREFIX,
   FACT_TYPE_PREFIX,
+  l1TypesOf,
   type AiIndexDreamingConfig,
   type DreamingRelationshipType,
 } from '../../common/dreaming';
@@ -17,32 +18,24 @@ import type { DreamingChangeSet } from './change_set';
 import { entityId, factId, sessionKiId } from './ids';
 import { citedMemoryIds, isStale, type DreamedKi } from './long_term';
 
-export const DREAMING_TYPE_PATTERN = /^[a-z0-9_]+$/;
-
 const NEW_REF_PREFIX = 'new:';
 
-/** The config with defaults applied: which types the model may write. */
+/** Which types the model may write. An empty kind is off. */
 export interface DreamingVocabulary {
   factTypes: ReadonlySet<string>;
-  /** `undefined` allows any entity type, with any attribute keys. */
-  entityTypes?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Each entity type with its attribute keys. */
+  entityTypes: ReadonlyMap<string, ReadonlySet<string>>;
   relationshipTypes: ReadonlyMap<string, DreamingRelationshipType>;
 }
 
-export const vocabularyOf = (config: AiIndexDreamingConfig): DreamingVocabulary => ({
-  factTypes: new Set(
-    config.facts && config.facts.length > 0
-      ? config.facts.map(({ type }) => type)
-      : [DEFAULT_DREAMING_FACT_TYPE]
-  ),
-  ...(config.entities &&
-    config.entities.length > 0 && {
-      entityTypes: new Map(
-        config.entities.map(({ type, attributes }) => [type, new Set(attributes ?? [])])
-      ),
-    }),
-  relationshipTypes: new Map((config.relationships ?? []).map((rel) => [rel.type, rel])),
-});
+export const vocabularyOf = (config: AiIndexDreamingConfig): DreamingVocabulary => {
+  const { facts, entities, relationships } = l1TypesOf(config);
+  return {
+    factTypes: new Set(facts.map(({ type }) => type)),
+    entityTypes: new Map(entities.map(({ type, attributes }) => [type, new Set(attributes ?? [])])),
+    relationshipTypes: new Map(relationships.map((rel) => [rel.type, rel])),
+  };
+};
 
 export interface GraphifyTaskContext {
   executionId: string;
@@ -53,6 +46,8 @@ export interface GraphifyTaskContext {
   memoryIds: ReadonlySet<string>;
   /** The session each known memory was recorded in. */
   sessionByMemoryId: ReadonlyMap<string, string>;
+  /** When each known memory was recorded: its `occurred_at`, else its `@timestamp`. */
+  recordedAtByMemoryId: ReadonlyMap<string, string>;
   /** The owner's current entities and facts by id. */
   existing: ReadonlyMap<string, DreamedKi>;
   /**
@@ -74,6 +69,8 @@ export interface UpsertEntityOperation {
   accessPatterns?: AccessPattern[];
   sourceMemoryIds: string[];
   sessionIds: string[];
+  /** When the latest of its sources was recorded. */
+  lastSeenAt?: string;
 }
 
 export interface UpsertFactOperation {
@@ -88,6 +85,8 @@ export interface UpsertFactOperation {
   accessPatterns?: AccessPattern[];
   sourceMemoryIds: string[];
   sessionIds: string[];
+  /** When the latest of its sources was recorded. */
+  lastSeenAt?: string;
 }
 
 export interface UpsertSessionOperation {
@@ -111,6 +110,8 @@ export interface RelationshipOperation {
   type: string;
   remove: boolean;
   sourceMemoryIds: string[];
+  /** When the latest of its sources was recorded; it marks the source entity as seen. */
+  lastSeenAt?: string;
 }
 
 export interface ClearStaleOperation {
@@ -163,6 +164,7 @@ export const resolveChangeSet = (
     vocabulary,
     memoryIds,
     sessionByMemoryId,
+    recordedAtByMemoryId,
     existing,
     sessions,
   } = context;
@@ -205,6 +207,14 @@ export const resolveChangeSet = (
     ...new Set(sourceIds.flatMap((id) => sessionByMemoryId.get(id) ?? [])),
   ];
 
+  const lastSeenAtOf = (sourceIds: readonly string[]): { lastSeenAt?: string } => {
+    const recordedAt = sourceIds
+      .flatMap((id) => recordedAtByMemoryId.get(id) ?? [])
+      .sort((a, b) => Date.parse(a) - Date.parse(b));
+    const lastSeenAt = recordedAt[recordedAt.length - 1];
+    return lastSeenAt !== undefined ? { lastSeenAt } : {};
+  };
+
   const existingOfKind = (ref: string, kind: 'entity' | 'fact'): DreamedKi | undefined => {
     const ki = existing.get(ref);
     if (ki && kindOf(ki) !== kind) {
@@ -222,6 +232,9 @@ export const resolveChangeSet = (
   // Entities first, so facts and relationships can refer to new entity keys.
   for (const entity of changeSet.entities) {
     attempt(`entity ${entity.ref}`, () => {
+      if (vocabulary.entityTypes.size === 0) {
+        reject('this AI index does not build entities');
+      }
       const current = existingOfKind(entity.ref, 'entity');
       if (entity.delete) {
         if (!current) {
@@ -239,13 +252,13 @@ export const resolveChangeSet = (
         reject('a new entity needs a type and a name');
       }
       assertTypePattern(type);
-      const allowedAttributes = vocabulary.entityTypes?.get(type);
-      if (vocabulary.entityTypes && !allowedAttributes) {
+      const allowedAttributes = vocabulary.entityTypes.get(type);
+      if (!allowedAttributes) {
         reject(`entity type '${type}' is not configured`);
       }
       const attributes: Record<string, string> = {};
       for (const { key, value } of entity.attributes ?? []) {
-        if (allowedAttributes && !allowedAttributes.has(key)) {
+        if (!allowedAttributes.has(key)) {
           reject(`attribute '${key}' is not configured for entity type '${type}'`);
         }
         attributes[key] = value;
@@ -265,6 +278,7 @@ export const resolveChangeSet = (
         ...(entity.access_patterns && { accessPatterns: entity.access_patterns }),
         sourceMemoryIds,
         sessionIds: sessionsOf(sourceMemoryIds),
+        ...lastSeenAtOf(sourceMemoryIds),
       });
     });
   }
@@ -279,6 +293,9 @@ export const resolveChangeSet = (
 
   for (const fact of changeSet.facts) {
     attempt(`fact ${fact.ref}`, () => {
+      if (vocabulary.factTypes.size === 0) {
+        reject('this AI index does not build facts');
+      }
       const current = existingOfKind(fact.ref, 'fact');
       if (fact.delete) {
         if (!current) {
@@ -300,7 +317,8 @@ export const resolveChangeSet = (
       if (!vocabulary.factTypes.has(type)) {
         reject(`fact type '${type}' is not configured`);
       }
-      const about = fact.about?.map(resolveEntityRef);
+      // Without entities a fact is about nothing; its current `about` references are kept.
+      const about = vocabulary.entityTypes.size > 0 ? fact.about?.map(resolveEntityRef) : undefined;
       const sourceMemoryIds = resolveSources(fact.source_memory_ids, current);
       const id = current?.id ?? factId(owner, executionId, taskId, fact.ref);
       touched.add(id);
@@ -314,6 +332,7 @@ export const resolveChangeSet = (
         ...(fact.access_patterns && { accessPatterns: fact.access_patterns }),
         sourceMemoryIds,
         sessionIds: sessionsOf(sourceMemoryIds),
+        ...lastSeenAtOf(sourceMemoryIds),
       });
     });
   }
@@ -330,6 +349,9 @@ export const resolveChangeSet = (
     attempt(
       `relationship ${relationship.source} ${relationship.type} ${relationship.target}`,
       () => {
+        if (vocabulary.relationshipTypes.size === 0) {
+          reject('this AI index does not build relationships');
+        }
         const configured = vocabulary.relationshipTypes.get(relationship.type);
         if (!configured) {
           reject(`relationship type '${relationship.type}' is not configured`);
@@ -345,15 +367,17 @@ export const resolveChangeSet = (
           );
         }
         const remove = relationship.remove === true;
+        const sourceMemoryIds = remove
+          ? []
+          : resolveSources(relationship.source_memory_ids, existing.get(sourceId));
         operations.push({
           op: 'relationship',
           sourceId,
           targetId,
           type: relationship.type,
           remove,
-          sourceMemoryIds: remove
-            ? []
-            : resolveSources(relationship.source_memory_ids, existing.get(sourceId)),
+          sourceMemoryIds,
+          ...lastSeenAtOf(sourceMemoryIds),
         });
       }
     );

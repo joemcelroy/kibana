@@ -7,7 +7,13 @@
 
 import pRetry from 'p-retry';
 import type { ElasticsearchClient } from '@kbn/core/server';
-import { ENTITY_TYPE_PREFIX, FACT_TYPE_PREFIX, SESSION_KI_TYPE } from '../../common/dreaming';
+import {
+  ENTITY_TYPE_PREFIX,
+  FACT_TYPE_PREFIX,
+  LAST_SEEN_AT_ATTRIBUTE,
+  OCCURRENCES_ATTRIBUTE,
+  SESSION_KI_TYPE,
+} from '../../common/dreaming';
 import type { AiIndexDest } from '../../common/http_api/ai_indices';
 import { MAX_KI_REFERENCES } from '../../common/step_types/ki';
 import { KiConflictError, KiNotFoundError } from '../ai_indices/errors';
@@ -29,11 +35,13 @@ import {
 } from './access_patterns';
 import { kiUri, memoryUri, sessionUri } from './ids';
 import {
-  ENTITY_ATTRIBUTE_PREFIX,
+  entityAttributesOf,
+  withoutLegacyEntityAttributes,
   SESSION_ATTRIBUTE,
   USER_ATTRIBUTE,
   citedMemoryIds,
   isStale,
+  occurrencesOf,
   type DreamedKi,
   type DreamedKiAttributes,
   type DreamedKiReference,
@@ -194,6 +202,34 @@ const writeDocument = async (
 const userAttributes = (userId: string | undefined): DreamedKiAttributes =>
   userId !== undefined ? { [USER_ATTRIBUTE]: userId } : {};
 
+const latest = (...dates: Array<string | undefined>): string | undefined =>
+  dates
+    .filter((date): date is string => date !== undefined && !Number.isNaN(Date.parse(date)))
+    .sort((a, b) => Date.parse(a) - Date.parse(b))
+    .pop();
+
+/**
+ * Counts each source the KI does not cite yet as one more sighting, and moves its last sighting
+ * forward. A source it already cites is not counted again, so a retried write counts nothing.
+ */
+const sightingAttributes = (
+  current: DreamedKi | undefined,
+  sourceMemoryIds: readonly string[],
+  lastSeenAt: string | undefined
+): DreamedKiAttributes => {
+  const cited = new Set(current ? citedMemoryIds(current) : []);
+  const seenAgain = new Set(sourceMemoryIds.filter((id) => !cited.has(id))).size;
+  const currentLastSeenAt = current?.attributes?.[LAST_SEEN_AT_ATTRIBUTE];
+  const lastSeen = latest(
+    typeof currentLastSeenAt === 'string' ? currentLastSeenAt : undefined,
+    lastSeenAt
+  );
+  return {
+    [OCCURRENCES_ATTRIBUTE]: occurrencesOf(current) + seenAgain,
+    ...(lastSeen !== undefined && { [LAST_SEEN_AT_ATTRIBUTE]: lastSeen }),
+  };
+};
+
 /**
  * Content with the access patterns rendered after it, and attributes that carry them. Content or
  * patterns the operation leaves out are kept from the current revision.
@@ -223,14 +259,12 @@ const upsertEntity = (context: ApplyContext, operation: UpsertEntityOperation) =
     title: operation.name,
     ...(operation.description !== undefined && { description: operation.description }),
     ...withAccessPatterns(current, operation.content, operation.accessPatterns, {
-      ...current?.attributes,
-      ...Object.fromEntries(
-        Object.entries(operation.attributes).map(([key, value]) => [
-          `${ENTITY_ATTRIBUTE_PREFIX}${key}`,
-          value,
-        ])
-      ),
+      // Configured attributes are stored as they are named, such as `category`.
+      ...withoutLegacyEntityAttributes(current?.attributes),
+      ...entityAttributesOf(current),
+      ...operation.attributes,
       ...userAttributes(context.userId),
+      ...sightingAttributes(current, operation.sourceMemoryIds, operation.lastSeenAt),
     }),
     references: addReferences(current?.references, [
       ...sourceReferences(operation.sourceMemoryIds),
@@ -253,6 +287,7 @@ const upsertFact = (context: ApplyContext, operation: UpsertFactOperation) =>
       ...withAccessPatterns(current, operation.content, operation.accessPatterns, {
         ...current?.attributes,
         ...userAttributes(context.userId),
+        ...sightingAttributes(current, operation.sourceMemoryIds, operation.lastSeenAt),
       }),
       references: addReferences(kept, [
         ...(about ?? []).map((id) => ({ uri: kiUri(id), relation: 'about' as const })),
@@ -293,15 +328,25 @@ const applyRelationship = (context: ApplyContext, operation: RelationshipOperati
         relation: 'relates_to',
         type: operation.type,
       };
-      const references = operation.remove
-        ? current.references?.filter(
+      if (operation.remove) {
+        return {
+          ...current,
+          references: current.references?.filter(
             (reference) => referenceKey(reference) !== referenceKey(relationship)
-          )
-        : addReferences(current.references, [
-            relationship,
-            ...sourceReferences(operation.sourceMemoryIds),
-          ]);
-      return { ...current, references };
+          ),
+        };
+      }
+      return {
+        ...current,
+        attributes: {
+          ...current.attributes,
+          ...sightingAttributes(current, operation.sourceMemoryIds, operation.lastSeenAt),
+        },
+        references: addReferences(current.references, [
+          relationship,
+          ...sourceReferences(operation.sourceMemoryIds),
+        ]),
+      };
     },
     'keep'
   );
@@ -309,7 +354,10 @@ const applyRelationship = (context: ApplyContext, operation: RelationshipOperati
 const clearStale = (context: ApplyContext, kiId: string) =>
   writeDocument(context, kiId, (current) => (current && isStale(current) ? current : undefined));
 
-/** Drops `derived_from` references to the given forgotten memories from a KI. */
+/**
+ * Drops `derived_from` references to the given forgotten memories from a KI, and no longer counts
+ * them as sightings of it.
+ */
 export const pruneSources = (
   context: ApplyContext,
   kiId: string,
@@ -318,17 +366,26 @@ export const pruneSources = (
   writeDocument(
     context,
     kiId,
-    (current) =>
-      current
-        ? {
-            ...current,
-            references: current.references?.filter(
-              ({ uri, relation }) =>
-                relation !== 'derived_from' ||
-                ![...forgottenMemoryIds].some((id) => uri === memoryUri(id))
-            ),
-          }
-        : undefined,
+    (current) => {
+      if (!current) {
+        return undefined;
+      }
+      const forgotten = citedMemoryIds(current).filter((id) => forgottenMemoryIds.has(id)).length;
+      return {
+        ...current,
+        ...(current.attributes?.[OCCURRENCES_ATTRIBUTE] !== undefined && {
+          attributes: {
+            ...current.attributes,
+            [OCCURRENCES_ATTRIBUTE]: Math.max(occurrencesOf(current) - forgotten, 1),
+          },
+        }),
+        references: current.references?.filter(
+          ({ uri, relation }) =>
+            relation !== 'derived_from' ||
+            ![...forgottenMemoryIds].some((id) => uri === memoryUri(id))
+        ),
+      };
+    },
     'keep'
   );
 
