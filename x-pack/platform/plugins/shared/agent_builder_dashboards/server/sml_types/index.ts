@@ -6,3 +6,4 @@
  */
 
 export { createDashboardSmlType } from './dashboard';
+export { createDashboardPanelSmlType } from './dashboard_panel';

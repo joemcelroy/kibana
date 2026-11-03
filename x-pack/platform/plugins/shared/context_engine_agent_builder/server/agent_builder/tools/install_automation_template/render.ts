@@ -9,12 +9,14 @@ import CONTEXT_ENGINE_DOCUMENT_TEMPLATE from './document_template.yaml.text';
 import CONTEXT_ENGINE_INDEX_METADATA_TEMPLATE from './index_metadata_template.yaml.text';
 import CONTEXT_ENGINE_UNIT_PROFILE_TEMPLATE from './unit_profile_template.yaml.text';
 import CONTEXT_ENGINE_TARGETED_KI_WRITER_TEMPLATE from './targeted_ki_writer_template.yaml.text';
+import CONTEXT_ENGINE_DASHBOARD_QUERIES_TEMPLATE from './dashboard_queries_template.yaml.text';
 
 export type AutomationTemplateId =
   | 'document_orchestration'
   | 'index_metadata'
   | 'unit_profile'
-  | 'targeted_ki_writer';
+  | 'targeted_ki_writer'
+  | 'dashboard_queries';
 
 /** Stable tag written into each installed workflow so a later call updates that workflow. */
 export const AUTOMATION_TEMPLATE_TAGS: Record<AutomationTemplateId, string> = {
@@ -22,6 +24,7 @@ export const AUTOMATION_TEMPLATE_TAGS: Record<AutomationTemplateId, string> = {
   index_metadata: 'ce-template:index_metadata',
   unit_profile: 'ce-template:unit_profile',
   targeted_ki_writer: 'ce-template:targeted_ki_writer',
+  dashboard_queries: 'ce-template:dashboard_queries',
 };
 
 export interface DocumentOrchestrationTemplateValues {
@@ -188,5 +191,26 @@ export const renderTargetedKiWriterTemplate = (values: TargetedKiWriterTemplateV
   return replaceTokens(CONTEXT_ENGINE_TARGETED_KI_WRITER_TEMPLATE, {
     __AI_INDEX_ID__: yamlString(values.aiIndexId),
     __KIS__: indentedKis,
+  });
+};
+
+export interface DashboardQueriesTemplateValues {
+  aiIndexId: string;
+  /** Injected as `automation_name` in the workflow consts; prefixes each KI ID. */
+  automationName: string;
+  /** Only panels that read this index pattern are written. */
+  indexPattern: string;
+  /** The dashboards to read; empty reads every dashboard in the space. */
+  dashboardIds?: readonly string[];
+}
+
+export const renderDashboardQueriesTemplate = (values: DashboardQueriesTemplateValues): string => {
+  assertSafeIdentifier('indexPattern', values.indexPattern);
+  return replaceTokens(CONTEXT_ENGINE_DASHBOARD_QUERIES_TEMPLATE, {
+    __AI_INDEX_ID__: yamlString(values.aiIndexId),
+    __AUTOMATION_NAME__: yamlString(values.automationName),
+    __INDEX_PATTERN__: yamlString(values.indexPattern),
+    // JSON is valid YAML flow syntax, so the list renders on the const's own line.
+    __DASHBOARD_IDS__: JSON.stringify(values.dashboardIds ?? []),
   });
 };

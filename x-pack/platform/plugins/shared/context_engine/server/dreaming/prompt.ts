@@ -17,7 +17,13 @@ import {
 } from '../../common/dreaming';
 import { accessPatternsOf, baseContent } from './access_patterns';
 import { memoryIdFromUri } from './ids';
-import { entityAttributesOf, isStale, occurrencesOf, type DreamedKi } from './long_term';
+import {
+  entityAttributesOf,
+  isStale,
+  occurrencesOf,
+  relationshipTypeOf,
+  type DreamedKi,
+} from './long_term';
 
 const MAX_PROMPT_KI_CONTENT_LENGTH = 2000;
 
@@ -151,7 +157,10 @@ const promptKi = (ki: DreamedKi) => {
       attributes: entityAttributesOf(ki),
       relationships: references
         .filter(({ relation }) => relation === 'relates_to')
-        .map(({ type, uri }) => ({ type, target: uri.replace(/^ki:\/\//, '') })),
+        .map((reference) => ({
+          type: relationshipTypeOf(reference),
+          target: reference.uri.replace(/^ki:\/\//, ''),
+        })),
     }),
     ...(!isEntity && {
       about: references

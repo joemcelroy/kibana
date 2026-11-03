@@ -77,6 +77,37 @@ const dashboardStateWithLensApi = {
   ],
 } as unknown as DashboardState;
 
+const ecommerceDashboard = {
+  title: '[eCommerce] Revenue Dashboard',
+  time_range: { from: 'now-7d', to: 'now' },
+  query: { expression: '', language: 'kql' },
+  filters: [],
+  panels: [
+    {
+      type: 'vis',
+      id: '4',
+      grid: { x: 0, y: 0, w: 12, h: 7 },
+      config: {
+        type: 'metric',
+        title: 'Sum of revenue',
+        data_source: { type: 'data_view_reference', ref_id: 'ecommerce' },
+        metrics: [{ label: 'Sum of revenue', operation: 'sum', field: 'taxful_total_price' }],
+      },
+    },
+    {
+      type: 'vis',
+      id: '5',
+      grid: { x: 12, y: 0, w: 12, h: 7 },
+      config: {
+        type: 'metric',
+        title: 'Broken',
+        data_source: { type: 'data_view_reference', ref_id: 'ecommerce' },
+        metrics: [{ operation: 'sum', field: 'missing' }],
+      },
+    },
+  ],
+} as unknown as DashboardState;
+
 const createDashboardClient = ({
   id = 'dashboard-1',
   attachmentData = dashboardAttachmentData,
@@ -190,6 +221,42 @@ describe('dashboardSmlType', () => {
     expect(result?.content).toContain('Operations');
     expect(result?.content).toContain('2 panels');
     expect(result?.content).toContain('1 sections');
+  });
+
+  it('adds each visualization panel with the ES|QL behind it, keeping only queries that run', async () => {
+    const dashboardClient = createDashboardClient({ data: ecommerceDashboard });
+    const query = jest
+      .fn()
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(new Error('Unknown column [missing]'));
+    const savedObjectsClient = {
+      get: jest.fn().mockResolvedValue({
+        attributes: { title: 'kibana_sample_data_ecommerce', timeFieldName: 'order_date' },
+      }),
+    };
+    const dashboardSmlType = createDashboardSmlType({
+      getDashboardClient: async () => dashboardClient,
+    });
+
+    const result = await dashboardSmlType.getSmlEntry('ecommerce', {
+      esClient: { esql: { query } } as never,
+      logger: { ...createLogger(), debug: jest.fn() } as never,
+      savedObjectsClient: savedObjectsClient as never,
+    });
+
+    expect(savedObjectsClient.get).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledWith({ query: expect.stringMatching(/\n\| LIMIT 0$/) });
+    expect(result?.content).toContain('Time range: now-7d to now');
+    expect(result?.content).toContain('Data: kibana_sample_data_ecommerce');
+    expect(result?.content).toContain('## Panels');
+    expect(result?.content).toContain('### Sum of revenue (metric)');
+    expect(result?.content).toContain('| STATS `Sum of revenue` = SUM(taxful_total_price)');
+    expect(result?.content).toContain('Note: A query was built but does not run');
+    expect(result?.attributes).toEqual({
+      esql: [expect.stringContaining('SUM(taxful_total_price)')],
+      index_patterns: ['kibana_sample_data_ecommerce'],
+      panel_count: 2,
+    });
   });
 
   it('converts saved dashboards into dashboard attachments with origin', async () => {

@@ -26,11 +26,13 @@ export interface InstallAutomationTemplateResult extends SaveAutomationResult {
 }
 import {
   AUTOMATION_TEMPLATE_TAGS,
+  renderDashboardQueriesTemplate,
   renderDocumentOrchestrationTemplate,
   renderIndexMetadataTemplate,
   renderTargetedKiWriterTemplate,
   renderUnitProfileTemplate,
   type AutomationTemplateId,
+  type DashboardQueriesTemplateValues,
   type DocumentOrchestrationTemplateValues,
   type IndexMetadataTemplateValues,
   type TargetedKiWriterTemplateValues,
@@ -61,6 +63,11 @@ export type InstallAutomationTemplateParams =
     > &
       WithName)
   | ({ template: 'targeted_ki_writer' } & Omit<TargetedKiWriterTemplateValues, 'aiIndexId'> &
+      WithName)
+  | ({ template: 'dashboard_queries' } & Omit<
+      DashboardQueriesTemplateValues,
+      'aiIndexId' | 'automationName'
+    > &
       WithName);
 
 const aiIndexIdFromAttachments = (attachments: AttachmentStateManager): string => {
@@ -98,6 +105,9 @@ const renderTemplate = (params: InstallAutomationTemplateParams, aiIndexId: stri
   }
   if (params.template === 'targeted_ki_writer') {
     return renderTargetedKiWriterTemplate({ aiIndexId, kis: params.kis });
+  }
+  if (params.template === 'dashboard_queries') {
+    return renderDashboardQueriesTemplate({ ...params, aiIndexId, automationName: params.name });
   }
   return renderIndexMetadataTemplate({ ...params, aiIndexId, automationName: params.name });
 };

@@ -16,8 +16,9 @@ describe('AgentBuilderDashboardsPlugin', () => {
 
     const plugin = new AgentBuilderDashboardsPlugin(coreMock.createPluginInitializerContext());
 
+    const versionedPost = jest.fn().mockReturnValue({ addVersion: jest.fn() });
     plugin.setup(
-      {} as never,
+      { http: { createRouter: () => ({ versioned: { post: versionedPost } }) } } as never,
       {
         agentBuilder: {
           attachments: { registerType: registerAttachmentType },
@@ -32,7 +33,13 @@ describe('AgentBuilderDashboardsPlugin', () => {
     expect(registerAttachmentType).toHaveBeenCalledTimes(1);
     expect(registerSkill).toHaveBeenCalledTimes(1);
     expect(registerSkill).toHaveBeenCalledWith(expect.objectContaining({ id: 'dashboards' }));
-    expect(registerSmlType).toHaveBeenCalledTimes(1);
+    expect(registerSmlType).toHaveBeenCalledTimes(2);
     expect(registerSmlType).toHaveBeenCalledWith(expect.objectContaining({ id: 'dashboard' }));
+    expect(registerSmlType).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'dashboard_panel' })
+    );
+    expect(versionedPost).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/internal/agent_builder_dashboards/ai_index_kis' })
+    );
   });
 });

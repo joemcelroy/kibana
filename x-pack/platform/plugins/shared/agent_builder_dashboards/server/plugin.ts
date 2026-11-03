@@ -20,8 +20,9 @@ import type {
 } from './types';
 import { registerSkills } from './skills';
 import { createDashboardAttachmentType } from './attachment_types';
-import { createDashboardSmlType } from './sml_types';
+import { createDashboardPanelSmlType, createDashboardSmlType } from './sml_types';
 import { createDashboardAppStateValidator } from './tools/generate/validate_dashboard_app_state';
+import { registerAiIndexKisRoute } from './routes/ai_index_kis';
 
 export class AgentBuilderDashboardsPlugin
   implements
@@ -61,8 +62,14 @@ export class AgentBuilderDashboardsPlugin
       }) as Parameters<typeof setupDeps.agentBuilder.attachments.registerType>[0]
     );
     setupDeps.agentBuilderSml.registerType(createDashboardSmlType({ getDashboardClient }));
+    setupDeps.agentBuilderSml.registerType(createDashboardPanelSmlType({ getDashboardClient }));
 
     registerSkills(setupDeps.agentBuilder, { getDashboardValidator });
+    registerAiIndexKisRoute({
+      router: coreSetup.http.createRouter(),
+      logger: this.logger,
+      getDashboardClient,
+    });
 
     return {};
   }

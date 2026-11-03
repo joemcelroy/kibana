@@ -42,6 +42,7 @@ import {
   citedMemoryIds,
   isStale,
   occurrencesOf,
+  relationshipTypeOf,
   type DreamedKi,
   type DreamedKiAttributes,
   type DreamedKiReference,
@@ -88,8 +89,10 @@ export interface ApplyContext {
   abortSignal?: AbortSignal;
 }
 
-const referenceKey = ({ uri, relation, type }: DreamedKiReference): string =>
-  `${relation ?? ''}\u0000${type ?? ''}\u0000${uri}`;
+const referenceKey = (reference: DreamedKiReference): string =>
+  `${reference.relation ?? ''}\u0000${
+    reference.relation === 'relates_to' ? relationshipTypeOf(reference) ?? '' : reference.type ?? ''
+  }\u0000${reference.uri}`;
 
 /**
  * Adds references without duplicates. Over the cap, the oldest `observed_in` references go
@@ -326,7 +329,7 @@ const applyRelationship = (context: ApplyContext, operation: RelationshipOperati
       const relationship: DreamedKiReference = {
         uri: kiUri(operation.targetId),
         relation: 'relates_to',
-        type: operation.type,
+        description: operation.type,
       };
       if (operation.remove) {
         return {

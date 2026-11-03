@@ -21,6 +21,7 @@ export type {
 
 export type {
   SmlTypeDefinition,
+  SmlContext,
   SmlEntry,
   SmlListItem,
   SmlSearchResult,

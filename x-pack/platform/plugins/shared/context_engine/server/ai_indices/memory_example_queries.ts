@@ -40,7 +40,7 @@ export const buildMemoryExampleQueries = (target: string): MemoryExampleQueries 
     ...latestActiveRevision,
     '| WHERE title:"<name>" OR description:"<name>"',
     '| SORT _score DESC, _id ASC',
-    '| KEEP id, title, description, type, references.uri, references.relation, references.type',
+    '| KEEP id, title, description, type, references.uri, references.relation, references.description',
     '| LIMIT 10',
   ].join('\n'),
   factsAboutEntity: [

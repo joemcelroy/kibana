@@ -29,6 +29,16 @@ export const MAX_OWNER_KIS = 500;
 
 export type DreamedKiAttributes = Record<string, string | number | boolean | string[]>;
 
+/**
+ * The configured type of a `relates_to` reference. It is written to `description`, which every AI
+ * index mapping has: the strict managed mappings have no `references.type` yet. `type` is still
+ * read, for references written before.
+ */
+export const relationshipTypeOf = (reference: {
+  type?: string;
+  description?: string;
+}): string | undefined => reference.type ?? reference.description;
+
 export interface DreamedKiReference {
   uri: string;
   relation?: KiReferenceRelation;

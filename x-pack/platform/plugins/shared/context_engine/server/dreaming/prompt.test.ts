@@ -154,3 +154,29 @@ describe('existing entities in the input', () => {
     expect(shown.attributes).toEqual({ category: 'Flight Disruption', severity: 'high' });
   });
 });
+
+describe('existing entity relationships in the input', () => {
+  it('show the type stored in the description, or in `type` for older references', () => {
+    const input = buildInput({
+      memories: [],
+      staleSources: [],
+      existing: [
+        {
+          id: 'alice/entity-person-bob',
+          type: 'entity.person',
+          title: 'Bob',
+          references: [
+            { uri: 'ki://alice/entity-team-a', relation: 'relates_to', description: 'member_of' },
+            { uri: 'ki://alice/entity-team-b', relation: 'relates_to', type: 'leads' },
+          ],
+        },
+      ],
+    });
+    const [shown] = JSON.parse(input.split('EXISTING:\n')[1]);
+
+    expect(shown.relationships).toEqual([
+      { type: 'member_of', target: 'alice/entity-team-a' },
+      { type: 'leads', target: 'alice/entity-team-b' },
+    ]);
+  });
+});

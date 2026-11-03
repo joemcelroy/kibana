@@ -26,6 +26,11 @@
 
 export const VISUALIZATION_KI_TYPE = 'visualization' as const;
 export const DASHBOARD_KI_TYPE = 'dashboard' as const;
+/**
+ * One panel of a dashboard, with the ES|QL behind it. Read with the dashboard privilege, since
+ * reading a panel means reading its dashboard.
+ */
+export const DASHBOARD_PANEL_KI_TYPE = 'dashboard_panel' as const;
 export const CONNECTOR_KI_TYPE = 'connector' as const;
 export const SIGNIFICANT_EVENT_KI_TYPE = 'significant_event' as const;
 export const WORKFLOW_KI_TYPE = 'workflow' as const;

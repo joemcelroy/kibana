@@ -53,6 +53,15 @@ describe('getAiIndicesInstructions', () => {
     expect(instructions).toContain('help locate and use another source');
   });
 
+  it('runs a verified query from a KI before writing its own ES|QL', () => {
+    const prompt = render();
+
+    expect(prompt).toContain('Recall before you write ES|QL over data an AI Index below covers.');
+    expect(prompt).toContain(
+      "such as a dashboard panel's ES|QL or a metric definition, run that query"
+    );
+  });
+
   it('continues with other relevant sources when KIs do not cover the question', () => {
     const instructions = render();
 
@@ -236,6 +245,7 @@ describe('getUserMemoryInstructions', () => {
 
     expect(instructions).toContain('## ABOUT THE USER');
     expect(instructions).toContain('what the user says now wins');
+    expect(instructions).toContain('It tells you what the user wants, not how to compute it');
     expect(instructions).toContain(
       '- profile: ## Work context Runs support for the loyalty program. (entity.user, 2026-10-28)'
     );

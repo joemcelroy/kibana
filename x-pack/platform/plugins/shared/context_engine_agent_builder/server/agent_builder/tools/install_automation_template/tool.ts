@@ -37,9 +37,11 @@ const TEMPLATE_FIELDS = {
   index_metadata: ['categoryField', 'sources'],
   unit_profile: ['unitKey', 'activityField', 'breakdownField', 'metricFields', 'maxUnits'],
   targeted_ki_writer: ['kis'],
+  dashboard_queries: ['dashboardIds'],
 } as const;
 
 const MAX_METRIC_FIELDS = 10;
+const MAX_DASHBOARD_IDS = 100;
 
 /** index_metadata takes either `sources` or `sourceIndex` + `categoryField`; checked separately. */
 const REQUIRED_TEMPLATE_FIELDS = {
@@ -47,6 +49,7 @@ const REQUIRED_TEMPLATE_FIELDS = {
   index_metadata: [],
   unit_profile: ['unitKey', 'activityField', 'breakdownField', 'sourceIndex'],
   targeted_ki_writer: ['kis'],
+  dashboard_queries: ['sourceIndex'],
 } as const;
 
 const findDuplicate = (values: readonly string[]): string | undefined =>
@@ -55,7 +58,13 @@ const findDuplicate = (values: readonly string[]): string | undefined =>
 const installAutomationTemplateSchema = z
   .object({
     template: z
-      .enum(['document_orchestration', 'index_metadata', 'unit_profile', 'targeted_ki_writer'])
+      .enum([
+        'document_orchestration',
+        'index_metadata',
+        'unit_profile',
+        'targeted_ki_writer',
+        'dashboard_queries',
+      ])
       .describe(
         dedent`
           Which automation to install. Required fields per template:
@@ -63,6 +72,7 @@ const installAutomationTemplateSchema = z
           index_metadata         → name, sources  (or sourceIndex + categoryField for one index)
           unit_profile           → name, sourceIndex, unitKey, activityField, breakdownField
           targeted_ki_writer     → name, kis  (no sourceIndex)
+          dashboard_queries      → name, sourceIndex (the index pattern the dashboards read), optional dashboardIds
         `
       ),
     name: z
@@ -81,6 +91,13 @@ const installAutomationTemplateSchema = z
       .optional()
       .describe(
         'REQUIRED for document_orchestration and unit_profile. For index_metadata, use sources instead, or sourceIndex + categoryField for a single index. Not used by targeted_ki_writer. Index or data stream the automation reads.'
+      ),
+    dashboardIds: z
+      .array(z.string().min(1).max(256))
+      .max(MAX_DASHBOARD_IDS)
+      .optional()
+      .describe(
+        'dashboard_queries only. Dashboards to read. Omit to read every dashboard in the space whose panels read sourceIndex.'
       ),
     sources: z
       .array(
@@ -294,6 +311,18 @@ const toInstallParams = (
       throw new Error('kis is required for targeted_ki_writer.');
     }
     return { template: 'targeted_ki_writer', kis: input.kis, name };
+  }
+
+  if (input.template === 'dashboard_queries') {
+    if (!input.sourceIndex) {
+      throw new Error('sourceIndex is required for dashboard_queries.');
+    }
+    return {
+      template: 'dashboard_queries',
+      indexPattern: input.sourceIndex,
+      ...(input.dashboardIds && { dashboardIds: input.dashboardIds }),
+      name,
+    };
   }
 
   if (input.template === 'document_orchestration') {

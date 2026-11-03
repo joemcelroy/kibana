@@ -14,6 +14,7 @@ import { WorkflowSchema } from '@kbn/workflows/spec/schema';
 import { parse } from 'yaml';
 import {
   AUTOMATION_TEMPLATE_TAGS,
+  renderDashboardQueriesTemplate,
   renderDocumentOrchestrationTemplate,
   renderIndexMetadataTemplate,
   renderTargetedKiWriterTemplate,
@@ -599,6 +600,51 @@ describe('automation template rendering', () => {
       expect(() =>
         renderTargetedKiWriterTemplate({ aiIndexId: 'my-ai`index', kis: kisYaml })
       ).toThrow(/aiIndexId/);
+    });
+  });
+
+  describe('dashboard_queries', () => {
+    const rendered = renderDashboardQueriesTemplate({
+      aiIndexId: 'ecommerce',
+      automationName: 'ecommerce-dashboards',
+      indexPattern: 'kibana_sample_data_ecommerce',
+    });
+
+    it('renders a valid workflow that fills the consts', () => {
+      const workflow = WorkflowSchema.parse(parse(rendered));
+
+      expect(workflow.consts).toEqual({
+        ai_index_id: 'ecommerce',
+        automation_name: 'ecommerce-dashboards',
+        index_pattern: 'kibana_sample_data_ecommerce',
+        dashboard_ids: [],
+      });
+      expect(workflow.tags).toContain('ce-template:dashboard_queries');
+    });
+
+    it('reads the dashboards through Kibana’s own listener, then writes verified KIs', () => {
+      const [fetch, write] = parse(rendered).steps;
+
+      expect(fetch).toEqual(
+        expect.objectContaining({
+          type: 'kibana.request',
+          with: expect.objectContaining({
+            use_server_info: true,
+            path: '/internal/agent_builder_dashboards/ai_index_kis',
+          }),
+        })
+      );
+      expect(write.steps[0].with.verifiers).toEqual(['esql-valid-syntax', 'esql-valid-runtime']);
+    });
+
+    it('rejects an index pattern that can’t be a plain identifier', () => {
+      expect(() =>
+        renderDashboardQueriesTemplate({
+          aiIndexId: 'ecommerce',
+          automationName: 'x',
+          indexPattern: 'bad`pattern',
+        })
+      ).toThrow(/indexPattern/);
     });
   });
 });

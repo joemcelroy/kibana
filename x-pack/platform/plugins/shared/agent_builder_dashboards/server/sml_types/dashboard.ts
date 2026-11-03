@@ -12,55 +12,13 @@ import {
   dashboardStateToAttachmentData,
 } from '@kbn/agent-builder-dashboards-common';
 import type { DashboardPluginStart } from '@kbn/dashboard-plugin/server';
-import type {
-  DashboardPanel,
-  DashboardSection,
-  DashboardState,
-} from '@kbn/as-code-dashboard-schema';
 import { DASHBOARD_KI_TYPE } from '@kbn/agent-builder-elastic-ai-index-ki-types';
+import { summarizeDashboardPanels } from './dashboard_esql';
+import { dashboardAttributes, dashboardContent } from './dashboard_kis';
 
 interface CreateDashboardSmlTypeOptions {
   getDashboardClient: () => Promise<DashboardPluginStart['client']>;
 }
-
-const toPanelSummary = (panel: DashboardPanel): string[] => {
-  const title =
-    (panel.config as { title?: string } | undefined)?.title ??
-    (panel.config as { attributes?: { title?: string } } | undefined)?.attributes?.title;
-
-  return [title, panel.type, panel.id ? `panel:${panel.id}` : undefined].filter(
-    (value): value is string => Boolean(value)
-  );
-};
-
-const toDashboardSearchContent = (state: DashboardState): string => {
-  const topLevelPanels = state.panels.filter(
-    (panel): panel is DashboardPanel => !('panels' in panel)
-  );
-  const sections = state.panels.filter((panel): panel is DashboardSection => 'panels' in panel);
-
-  const contentParts = [state.title, state.description];
-
-  for (const panel of topLevelPanels) {
-    contentParts.push(...toPanelSummary(panel));
-  }
-
-  for (const section of sections) {
-    contentParts.push(section.title, `section:${section.id}`);
-    for (const panel of section.panels) {
-      contentParts.push(...toPanelSummary(panel));
-    }
-  }
-
-  contentParts.push(
-    `${
-      topLevelPanels.length + sections.reduce((count, section) => count + section.panels.length, 0)
-    } panels`,
-    `${sections.length} sections`
-  );
-
-  return contentParts.filter(Boolean).join('\n');
-};
 
 export const createDashboardSmlType = ({
   getDashboardClient,
@@ -93,11 +51,13 @@ export const createDashboardSmlType = ({
     try {
       const dashboardClient = await getDashboardClient();
       const dashboard = await dashboardClient.read(context.savedObjectsClient, originId);
+      const panels = await summarizeDashboardPanels(dashboard.data, context);
 
       return {
         type: DASHBOARD_KI_TYPE,
         title: dashboard.data.title ?? originId,
-        content: toDashboardSearchContent(dashboard.data),
+        content: dashboardContent(dashboard.data, panels),
+        attributes: dashboardAttributes(panels),
       };
     } catch (error) {
       context.logger.warn(

@@ -182,5 +182,9 @@ export const USER_MEMORIES_AI_INDEX_ID = agentBuilderUserMemoriesAiIndexId;
 /**
  * A system index: users cannot query it directly. Kibana reads and writes it, and each user only
  * reaches their own memories, through the memory APIs and their agents' prompts.
+ *
+ * It sits under `.ai-index-idx-elastic-index-*` because Elasticsearch's `kibana_system` role grants
+ * Kibana that pattern (with `.ai-index-idx-elastic-index` itself, for the `elastic` AI index), so
+ * Kibana can create the index on first write. A name of its own needs that role extended first.
  */
-export const USER_MEMORIES_AI_INDEX_DEST = '.ai-index-idx-user-memories';
+export const USER_MEMORIES_AI_INDEX_DEST = '.ai-index-idx-elastic-index-user-memories';

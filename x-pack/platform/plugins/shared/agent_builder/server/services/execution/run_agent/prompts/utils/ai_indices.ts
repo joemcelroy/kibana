@@ -73,6 +73,8 @@ An AI Index stores Knowledge Indicators (KIs): context prepared for agents, such
 
 Search relevant AI Indices before broader retrieval when their KIs may help. If they do not cover the question, continue with other relevant data or tools.
 
+Recall before you write ES|QL over data an AI Index below covers. When a KI gives a definition, an access pattern or a query for what you are asked, such as a dashboard panel's ES|QL or a metric definition, run that query, changing only its time range or filters, rather than writing your own: it is verified, and it matches what the user sees on their dashboards. Knowing what the user wants is not the same as knowing how to compute it.
+
 To look something up, start with \`${contextEngineRecallTools.recall}\`: it searches the AI Indices below by meaning and by words, including what was remembered. Set \`aiIndexIds\` to narrow it, or \`scope: 'short-term'\` to search recently remembered memories that are not dreamed yet.
 
 ${catalogSection}
@@ -125,7 +127,7 @@ export const getUserMemoryInstructions = ({
   return cleanPrompt(`
 ## ABOUT THE USER
 
-What earlier conversations taught you about the user you are talking to, newest first. Use it to tailor your answers without reciting it. It can be out of date: what the user says now wins.
+What earlier conversations taught you about the user you are talking to, newest first. Use it to tailor your answers without reciting it. It can be out of date: what the user says now wins. It tells you what the user wants, not how to compute it: when AI Indices are listed, still recall them for the definitions and queries to use.
 
 ${entries.map(formatUserMemoryEntry).join('\n')}
 `);

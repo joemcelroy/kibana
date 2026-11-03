@@ -104,6 +104,39 @@ describe('dreaming apply', () => {
     expect(statusesWritten()).toEqual(['stale']);
   });
 
+  it('stores a relationship type in the reference description, which strict mappings allow', async () => {
+    findKiRevisionMock.mockResolvedValue(revisionOf(ki('active', ['m-1'])));
+    const relationship = (remove: boolean) => ({
+      op: 'relationship' as const,
+      sourceId: 'alice/entity-person-bob',
+      targetId: 'alice/entity-team-platform',
+      type: 'member_of',
+      remove,
+      sourceMemoryIds: remove ? [] : ['m-2'],
+    });
+
+    await applyOperations(context, [relationship(false)]);
+    expect(written()[0].references).toContainEqual({
+      uri: 'ki://alice/entity-team-platform',
+      relation: 'relates_to',
+      description: 'member_of',
+    });
+    expect(written()[0].references?.some((reference) => 'type' in reference)).toBe(false);
+
+    // A reference written with `type` before is still the same relationship, so it is removed.
+    findKiRevisionMock.mockResolvedValue(
+      revisionOf({
+        ...ki('active', ['m-1']),
+        references: [
+          { uri: 'memory://m-1', relation: 'derived_from' },
+          { uri: 'ki://alice/entity-team-platform', relation: 'relates_to', type: 'member_of' },
+        ],
+      })
+    );
+    await applyOperations(context, [relationship(true)]);
+    expect(written()[1].references).toEqual([{ uri: 'memory://m-1', relation: 'derived_from' }]);
+  });
+
   it('writes the entity content summary, and keeps it when an update leaves it out', async () => {
     const upsert = (content?: string) => ({
       op: 'upsert_entity' as const,
