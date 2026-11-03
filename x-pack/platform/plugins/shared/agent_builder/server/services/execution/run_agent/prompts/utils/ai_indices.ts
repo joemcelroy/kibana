@@ -31,9 +31,10 @@ const getMemoryInstructions = (catalog: AiIndexCatalogEntry[]): string => {
 };
 
 /**
- * Builds the AI INDICES prompt section from the resolved catalog. Empty when disabled or when
- * the catalog has no entries. Hidden entries, such as `user-memories`, are not listed: an agent
- * gets what they know in the ABOUT THE USER section, and only remembers into them.
+ * Builds the AI INDICES prompt section from the resolved catalog. Empty when disabled. An empty
+ * catalog still renders the section, so the agent asks the user to assign indices instead of
+ * looking for ones it was not given. Hidden entries, such as `user-memories`, are not listed: an
+ * agent gets what they know in the ABOUT THE USER section, and only remembers into them.
  */
 export const getAiIndicesInstructions = ({
   enabled,
@@ -44,13 +45,13 @@ export const getAiIndicesInstructions = ({
   catalog: AiIndexCatalogEntry[];
   spaceId: string;
 }): string => {
-  if (!enabled || catalog.length === 0) {
+  if (!enabled) {
     return '';
   }
 
   const memorySection = getMemoryInstructions(catalog);
   const visible = catalog.filter(({ hidden }) => !hidden);
-  if (visible.length === 0) {
+  if (catalog.length > 0 && visible.length === 0) {
     return memorySection ? cleanPrompt(`## MEMORY\n\n${memorySection}`) : '';
   }
 
@@ -63,8 +64,18 @@ export const getAiIndicesInstructions = ({
           memoryEnabled ? '; takes memories' : ''
         }${description ? ` — ${description}` : ''}`
     );
-  const catalogSection =
-    entries.length > 0 ? `Available to this agent:\n\n${entries.join('\n')}` : '';
+  const available =
+    entries.length > 0 ? `Available to this agent:\n\n${entries.join('\n')}\n\n` : '';
+  const guidance =
+    visible.length === 0
+      ? `No AI Indices are assigned to this agent. Do not look for other AI Indices. If one would help, ask the user to assign it to this agent.`
+      : `Recall before you write ES|QL over data an AI Index below covers. When a KI gives a definition, an access pattern or a query for what you are asked, such as a dashboard panel's ES|QL or a metric definition, run that query, changing only its time range or filters, rather than writing your own: it is verified, and it matches what the user sees on their dashboards. Knowing what the user wants is not the same as knowing how to compute it.
+
+To look something up, start with \`${contextEngineRecallTools.recall}\`: it searches the AI Indices below by meaning and by words, including what was remembered. Set \`aiIndexIds\` to narrow it, or \`scope: 'short-term'\` to search recently remembered memories that are not dreamed yet.
+
+${available}${memorySection}
+
+For counts, filters, exact lookups or following a KI's references, recall also takes an ES|QL query in place of plain words. Load the \`${kiRetrievalSkillId}\` skill before you work with an AI Index: it carries the AI Index list and describe tools and the guidance for writing those queries.`;
 
   return cleanPrompt(`
 ## AI INDICES
@@ -73,15 +84,7 @@ An AI Index stores Knowledge Indicators (KIs): context prepared for agents, such
 
 Search relevant AI Indices before broader retrieval when their KIs may help. If they do not cover the question, continue with other relevant data or tools.
 
-Recall before you write ES|QL over data an AI Index below covers. When a KI gives a definition, an access pattern or a query for what you are asked, such as a dashboard panel's ES|QL or a metric definition, run that query, changing only its time range or filters, rather than writing your own: it is verified, and it matches what the user sees on their dashboards. Knowing what the user wants is not the same as knowing how to compute it.
-
-To look something up, start with \`${contextEngineRecallTools.recall}\`: it searches the AI Indices below by meaning and by words, including what was remembered. Set \`aiIndexIds\` to narrow it, or \`scope: 'short-term'\` to search recently remembered memories that are not dreamed yet.
-
-${catalogSection}
-
-${memorySection}
-
-For counts, filters, exact lookups or following a KI's references, recall also takes an ES|QL query in place of plain words. Load the \`${kiRetrievalSkillId}\` skill first: it carries the AI Index list and describe tools and the guidance for writing those queries.
+${guidance}
 
 Query everything else, including a source a KI points you to, with your other data tools, such as \`generate_esql\` and \`execute_esql\`, as you would without AI Indices.
 

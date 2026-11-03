@@ -5,14 +5,13 @@
  * 2.0.
  */
 
-import { z, isoDateTime } from '@kbn/zod/v4';
-import { MAX_AI_INDEX_ID_LENGTH } from '../constants';
+import { z, isoDateTime, lazySchema } from '@kbn/zod/v4';
+import { MAX_AI_INDEX_ID_LENGTH, MAX_KI_CONTENT_LENGTH } from '../constants';
 
 export const MAX_KI_ID_LENGTH = 512;
 export const MAX_KI_TYPE_LENGTH = 256;
 export const MAX_KI_TITLE_LENGTH = 512;
 export const MAX_KI_DESCRIPTION_LENGTH = 2048;
-export const MAX_KI_CONTENT_LENGTH = 65536;
 export const MAX_KI_TAG_LENGTH = 256;
 export const MAX_KI_TAGS = 100;
 export const MAX_KI_ATTRIBUTE_KEY_LENGTH = 256;
@@ -34,7 +33,7 @@ export const KI_REFERENCE_RELATIONS = [
   'observed_in',
 ] as const;
 /** `stale`: a KI dreaming derived from a forgotten memory, hidden from recall until re-dreamed. */
-export const KI_LIFECYCLE_STATUSES = ['active', 'stale', 'deleted'] as const;
+export const KI_LIFECYCLE_STATUSES = ['active', 'stale', 'deleted', 'verification_failed'] as const;
 
 export const aiIndexIdSchema = z
   .string()
@@ -59,25 +58,27 @@ export const kiLifecycleStatusSchema = z
 export type KiLifecycleStatus = z.infer<typeof kiLifecycleStatusSchema>;
 
 /** A URI this KI relates to. */
-export const kiReferenceSchema = z.object({
-  uri: z
-    .string()
-    .min(1)
-    .max(MAX_KI_REFERENCE_URI_LENGTH)
-    .describe('The referenced URI, for example index://logs-*'),
-  relation: kiReferenceRelationSchema.optional(),
-  type: z
-    .string()
-    .min(1)
-    .max(MAX_KI_REFERENCE_TYPE_LENGTH)
-    .optional()
-    .describe('A finer-grained kind of relation, for example a configured relationship type'),
-  description: z
-    .string()
-    .max(MAX_KI_REFERENCE_DESCRIPTION_LENGTH)
-    .optional()
-    .describe('Why this reference exists'),
-});
+export const kiReferenceSchema = lazySchema(() =>
+  z.object({
+    uri: z
+      .string()
+      .min(1)
+      .max(MAX_KI_REFERENCE_URI_LENGTH)
+      .describe('The referenced URI, for example index://logs-*'),
+    relation: kiReferenceRelationSchema.optional(),
+    type: z
+      .string()
+      .min(1)
+      .max(MAX_KI_REFERENCE_TYPE_LENGTH)
+      .optional()
+      .describe('A finer-grained kind of relation, for example a configured relationship type'),
+    description: z
+      .string()
+      .max(MAX_KI_REFERENCE_DESCRIPTION_LENGTH)
+      .optional()
+      .describe('Why this reference exists'),
+  })
+);
 
 type KiAttributeValue = string | number | boolean | string[];
 

@@ -11,7 +11,7 @@ export type {
   ProcessedRoundInput,
 } from './processed_input';
 export type {
-  ProcessedCustomEvent,
+  ProcessedStandaloneEvent,
   ProcessedTimelineEvent,
   ProcessedUserMessageEvent,
 } from './processed_timeline';
@@ -216,6 +216,7 @@ export type {
   GetAttachmentArgs,
   UpdateAttachmentArgs,
   DeleteAttachmentArgs,
+  RestoreAttachmentArgs,
   ListAttachmentsArgs,
   BulkCreateAttachmentInput,
   BulkCreateAttachmentError,

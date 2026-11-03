@@ -6,7 +6,7 @@
  */
 
 import type { ToolSchema } from '@kbn/inference-common';
-import { z } from '@kbn/zod/v4';
+import { z, lazySchema } from '@kbn/zod/v4';
 import {
   MAX_ACCESS_PATTERN_ESQL_LENGTH,
   MAX_ACCESS_PATTERN_LABEL_LENGTH,
@@ -14,10 +14,10 @@ import {
   MAX_DREAMING_ACCESS_PATTERNS,
   MAX_DREAMING_CHANGE_SET_ITEMS,
 } from '../../common/dreaming';
+import { MAX_KI_CONTENT_LENGTH } from '../../common/constants';
 import {
   MAX_KI_ATTRIBUTE_KEY_LENGTH,
   MAX_KI_ATTRIBUTE_VALUE_LENGTH,
-  MAX_KI_CONTENT_LENGTH,
   MAX_KI_DESCRIPTION_LENGTH,
   MAX_KI_ID_LENGTH,
   MAX_KI_TITLE_LENGTH,
@@ -27,86 +27,92 @@ const MAX_REF_LENGTH = MAX_KI_ID_LENGTH;
 const MAX_TYPE_LENGTH = 128;
 const MAX_SOURCE_IDS = 100;
 
-const sourceMemoryIdsSchema = z.array(z.string().min(1).max(MAX_REF_LENGTH)).max(MAX_SOURCE_IDS);
+const sourceMemoryIdsSchema = lazySchema(() =>
+  z.array(z.string().min(1).max(MAX_REF_LENGTH)).max(MAX_SOURCE_IDS)
+);
 
-const accessPatternsSchema = z
-  .array(
-    z.object({
-      question_type: z.string().min(1).max(MAX_ACCESS_PATTERN_LABEL_LENGTH),
-      esql_template: z.string().min(1).max(MAX_ACCESS_PATTERN_ESQL_LENGTH),
-      esql_example: z.string().min(1).max(MAX_ACCESS_PATTERN_ESQL_LENGTH),
-      returns: z.string().min(1).max(MAX_ACCESS_PATTERN_RETURNS_LENGTH),
-    })
-  )
-  .max(MAX_DREAMING_ACCESS_PATTERNS);
+const accessPatternsSchema = lazySchema(() =>
+  z
+    .array(
+      z.object({
+        question_type: z.string().min(1).max(MAX_ACCESS_PATTERN_LABEL_LENGTH),
+        esql_template: z.string().min(1).max(MAX_ACCESS_PATTERN_ESQL_LENGTH),
+        esql_example: z.string().min(1).max(MAX_ACCESS_PATTERN_ESQL_LENGTH),
+        returns: z.string().min(1).max(MAX_ACCESS_PATTERN_RETURNS_LENGTH),
+      })
+    )
+    .max(MAX_DREAMING_ACCESS_PATTERNS)
+);
 
 /**
  * What the model returns. Structured output has no null or free-form object keys, so a delete
  * is `delete: true` rather than `null`, and attributes are key/value pairs.
  */
-export const changeSetSchema = z.object({
-  entities: z
-    .array(
-      z.object({
-        ref: z.string().min(1).max(MAX_REF_LENGTH),
-        delete: z.boolean().optional(),
-        type: z.string().max(MAX_TYPE_LENGTH).optional(),
-        name: z.string().max(MAX_KI_TITLE_LENGTH).optional(),
-        description: z.string().max(MAX_KI_DESCRIPTION_LENGTH).optional(),
-        content: z.string().max(MAX_KI_CONTENT_LENGTH).optional(),
-        attributes: z
-          .array(
-            z.object({
-              key: z.string().min(1).max(MAX_KI_ATTRIBUTE_KEY_LENGTH),
-              value: z.string().max(MAX_KI_ATTRIBUTE_VALUE_LENGTH),
-            })
-          )
-          .max(MAX_DREAMING_CHANGE_SET_ITEMS)
-          .optional(),
-        access_patterns: accessPatternsSchema.optional(),
-        source_memory_ids: sourceMemoryIdsSchema.optional(),
-      })
-    )
-    .max(MAX_DREAMING_CHANGE_SET_ITEMS)
-    .default([]),
-  facts: z
-    .array(
-      z.object({
-        ref: z.string().min(1).max(MAX_REF_LENGTH),
-        delete: z.boolean().optional(),
-        type: z.string().max(MAX_TYPE_LENGTH).optional(),
-        title: z.string().max(MAX_KI_TITLE_LENGTH).optional(),
-        content: z.string().max(MAX_KI_CONTENT_LENGTH).optional(),
-        about: z.array(z.string().min(1).max(MAX_REF_LENGTH)).max(MAX_SOURCE_IDS).optional(),
-        access_patterns: accessPatternsSchema.optional(),
-        source_memory_ids: sourceMemoryIdsSchema.optional(),
-      })
-    )
-    .max(MAX_DREAMING_CHANGE_SET_ITEMS)
-    .default([]),
-  relationships: z
-    .array(
-      z.object({
-        type: z.string().min(1).max(MAX_TYPE_LENGTH),
-        source: z.string().min(1).max(MAX_REF_LENGTH),
-        target: z.string().min(1).max(MAX_REF_LENGTH),
-        remove: z.boolean().optional(),
-        source_memory_ids: sourceMemoryIdsSchema.optional(),
-      })
-    )
-    .max(MAX_DREAMING_CHANGE_SET_ITEMS)
-    .default([]),
-  sessions: z
-    .array(
-      z.object({
-        session_id: z.string().min(1).max(MAX_REF_LENGTH),
-        title: z.string().max(MAX_KI_TITLE_LENGTH).optional(),
-        summary: z.string().max(MAX_KI_CONTENT_LENGTH).optional(),
-      })
-    )
-    .max(MAX_DREAMING_CHANGE_SET_ITEMS)
-    .default([]),
-});
+export const changeSetSchema = lazySchema(() =>
+  z.object({
+    entities: z
+      .array(
+        z.object({
+          ref: z.string().min(1).max(MAX_REF_LENGTH),
+          delete: z.boolean().optional(),
+          type: z.string().max(MAX_TYPE_LENGTH).optional(),
+          name: z.string().max(MAX_KI_TITLE_LENGTH).optional(),
+          description: z.string().max(MAX_KI_DESCRIPTION_LENGTH).optional(),
+          content: z.string().max(MAX_KI_CONTENT_LENGTH).optional(),
+          attributes: z
+            .array(
+              z.object({
+                key: z.string().min(1).max(MAX_KI_ATTRIBUTE_KEY_LENGTH),
+                value: z.string().max(MAX_KI_ATTRIBUTE_VALUE_LENGTH),
+              })
+            )
+            .max(MAX_DREAMING_CHANGE_SET_ITEMS)
+            .optional(),
+          access_patterns: accessPatternsSchema.optional(),
+          source_memory_ids: sourceMemoryIdsSchema.optional(),
+        })
+      )
+      .max(MAX_DREAMING_CHANGE_SET_ITEMS)
+      .default([]),
+    facts: z
+      .array(
+        z.object({
+          ref: z.string().min(1).max(MAX_REF_LENGTH),
+          delete: z.boolean().optional(),
+          type: z.string().max(MAX_TYPE_LENGTH).optional(),
+          title: z.string().max(MAX_KI_TITLE_LENGTH).optional(),
+          content: z.string().max(MAX_KI_CONTENT_LENGTH).optional(),
+          about: z.array(z.string().min(1).max(MAX_REF_LENGTH)).max(MAX_SOURCE_IDS).optional(),
+          access_patterns: accessPatternsSchema.optional(),
+          source_memory_ids: sourceMemoryIdsSchema.optional(),
+        })
+      )
+      .max(MAX_DREAMING_CHANGE_SET_ITEMS)
+      .default([]),
+    relationships: z
+      .array(
+        z.object({
+          type: z.string().min(1).max(MAX_TYPE_LENGTH),
+          source: z.string().min(1).max(MAX_REF_LENGTH),
+          target: z.string().min(1).max(MAX_REF_LENGTH),
+          remove: z.boolean().optional(),
+          source_memory_ids: sourceMemoryIdsSchema.optional(),
+        })
+      )
+      .max(MAX_DREAMING_CHANGE_SET_ITEMS)
+      .default([]),
+    sessions: z
+      .array(
+        z.object({
+          session_id: z.string().min(1).max(MAX_REF_LENGTH),
+          title: z.string().max(MAX_KI_TITLE_LENGTH).optional(),
+          summary: z.string().max(MAX_KI_CONTENT_LENGTH).optional(),
+        })
+      )
+      .max(MAX_DREAMING_CHANGE_SET_ITEMS)
+      .default([]),
+  })
+);
 
 export type DreamingChangeSet = z.infer<typeof changeSetSchema>;
 

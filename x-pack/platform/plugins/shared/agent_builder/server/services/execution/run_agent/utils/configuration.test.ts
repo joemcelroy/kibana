@@ -5,14 +5,43 @@
  * 2.0.
  */
 
-import type { KibanaRequest } from '@kbn/core-http-server';
+import { httpServerMock } from '@kbn/core/server/mocks';
 import { loggingSystemMock } from '@kbn/core-logging-server-mocks';
 import type { AgentConfiguration } from '@kbn/agent-builder-common';
+import { agentBuilderDefaultAiIndexId } from '@kbn/agent-builder-common';
 import { resolveConfiguration } from './configuration';
 
 describe('resolveConfiguration', () => {
-  const request = {} as KibanaRequest;
+  const request = httpServerMock.createKibanaRequest();
   const logger = loggingSystemMock.createLogger();
+  const assigned = {
+    tools: [],
+    ai_indices: [agentBuilderDefaultAiIndexId, 'custom-index'],
+  };
+
+  it('passes assigned AI indices through and resolves the catalog', async () => {
+    const resolved = await resolveConfiguration(assigned, {
+      aiIndicesEnabled: true,
+      request,
+    });
+
+    expect(resolved.aiIndices).toEqual([agentBuilderDefaultAiIndexId, 'custom-index']);
+    expect(resolved.aiIndexCatalog?.map(({ id }) => id)).toEqual([
+      agentBuilderDefaultAiIndexId,
+      'custom-index',
+    ]);
+  });
+
+  it('omits the catalog when AI indices are disabled', async () => {
+    const resolved = await resolveConfiguration(assigned, {
+      aiIndicesEnabled: false,
+      request,
+    });
+
+    expect(resolved.aiIndices).toEqual([agentBuilderDefaultAiIndexId, 'custom-index']);
+    expect(resolved.aiIndexCatalog).toBeUndefined();
+  });
+
   const configuration: AgentConfiguration = {
     instructions: 'Be brief.',
     tools: [],

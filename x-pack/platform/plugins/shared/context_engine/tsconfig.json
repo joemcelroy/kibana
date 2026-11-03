@@ -87,6 +87,8 @@
     "@kbn/inference-common",
     "@kbn/search-inference-endpoints",
     "@kbn/core-data-streams-server",
-    "@kbn/es-mappings"
+    "@kbn/es-mappings",
+    "@kbn/unsaved-changes-prompt",
+    "@kbn/cloud-plugin"
   ]
 }

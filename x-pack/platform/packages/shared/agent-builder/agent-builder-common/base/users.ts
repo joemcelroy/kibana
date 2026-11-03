@@ -44,4 +44,5 @@ export interface CurrentUser extends UserIdAndName {
    * requests without a profile (basic auth) are known by. It owns what those requests created.
    */
   realmId?: string;
+  canManageSecurity?: boolean;
 }

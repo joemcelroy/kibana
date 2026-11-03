@@ -61,9 +61,12 @@ const emptyKiCounts = (): KiLifecycleCounts => ({ active: 0, expired: 0, stale: 
 const isKiLifecycleBucket = (value: unknown): value is KiLifecycleBucket =>
   KI_LIFECYCLE_BUCKETS.includes(value as KiLifecycleBucket);
 
-/** Counts the newest revision of each KI into a lifecycle bucket. Unmapped fields are skipped. */
+/**
+ * Counts the newest revision of each KI into a lifecycle bucket. Unmapped fields are skipped and
+ * KIs that failed verification are left out.
+ */
 const kiLifecycleCountsQuery = (dest: AiIndexDest, columns: Set<string>): string => {
-  const hasStatus = (status: 'deleted' | 'stale') =>
+  const hasStatus = (status: 'deleted' | 'stale' | 'verification_failed') =>
     columns.has('governance.lifecycle.status')
       ? `governance.lifecycle.status == "${status}"`
       : 'false';
@@ -71,11 +74,11 @@ const kiLifecycleCountsQuery = (dest: AiIndexDest, columns: Set<string>): string
   return [
     `FROM ${JSON.stringify(dest.value)} METADATA _id, _index`,
     ...latestRevisionPipeline(dest, (field) => columns.has(field)),
-    `EVAL lifecycle = CASE(COALESCE(${hasStatus(
-      'deleted'
-    )}, false), "deleted", COALESCE(${hasStatus(
+    `EVAL lifecycle = CASE(COALESCE(${hasStatus('deleted')}, false), "deleted", COALESCE(${hasStatus(
       'stale'
-    )}, false), "stale", COALESCE(${expired}, false), "expired", "active")`,
+    )}, false), "stale", COALESCE(${hasStatus(
+      'verification_failed'
+    )}, false), "verification_failed", COALESCE(${expired}, false), "expired", "active")`,
     'STATS count = COUNT(*) BY lifecycle',
   ].join('\n| ');
 };

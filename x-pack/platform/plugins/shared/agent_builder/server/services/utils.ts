@@ -160,7 +160,7 @@ export const getUserFromRequest = async ({
   security: SecurityServiceStart;
   esClient: ElasticsearchClient;
 }): Promise<CurrentUser> => {
-  const isAdmin = await isAdminFromRequest({ esClient });
+  const { isAdmin, canManageSecurity } = await getCallerPrivileges({ esClient });
   const authUser = security.authc.getCurrentUser(request);
 
   const principal = security.authc.getPrincipal(request);
@@ -171,6 +171,7 @@ export const getUserFromRequest = async ({
       username: authUser?.username ?? (await esClient.security.authenticate()).username,
       type: 'service_account',
       isAdmin,
+      canManageSecurity,
     };
   }
 
@@ -187,7 +188,7 @@ export const getUserFromRequest = async ({
   if (authUser?.username) {
     const id = await toStableUserId({ authUser, request, resolveApiKeyProfileUid });
 
-    return { id, username: authUser.username, type: 'user', isAdmin, ...(await realmIdOf(id)) };
+    return { id, username: authUser.username, type: 'user', isAdmin, canManageSecurity, ...(await realmIdOf(id)) };
   }
 
   // A user on this path may have a profile that `getCurrentUser` could not see; a realm id would
@@ -195,27 +196,35 @@ export const getUserFromRequest = async ({
   const { username } = await esClient.security.authenticate();
   const id = await toStableUserId({ authUser: authUser ?? {}, request, resolveApiKeyProfileUid });
 
-  return { id, username, type: 'user', isAdmin, ...(await realmIdOf(id)) };
+  return { id, username, type: 'user', isAdmin, canManageSecurity, ...(await realmIdOf(id)) };
 };
 
 const ADMIN_PRIVILEGE = 'agent_builder:admin'; // intentionally unregistered privilege
+const MANAGE_SECURITY_PRIVILEGE = 'manage_security';
+
+export interface CallerPrivileges {
+  /** Wildcard Elasticsearch privileges (for example `superuser`). */
+  isAdmin: boolean;
+  /** The `manage_security` cluster privilege, which gates service account bindings. */
+  canManageSecurity: boolean;
+}
 
 /**
- * Returns `true` only for users with wildcard Elasticsearch privileges (for example `superuser`).
+ * Resolves the caller's platform-level privileges with a single `has_privileges` call.
  *
- * We intentionally check an application privilege name that is not registered by Kibana
- * (`agent_builder:admin`). Because this privilege is unregistered, normal roles fail this check,
- * while wildcard roles (for example application/cluster `*`/`all`) pass.
- *
- * This is used as an internal admin check, independent of feature/sub-feature grants.
+ * Admin is checked against an application privilege name that is not registered by Kibana
+ * (`agent_builder:admin`). Because it is unregistered, normal roles fail this check while wildcard
+ * roles (for example application/cluster `*`/`all`) pass, which gives an internal admin check
+ * independent of feature/sub-feature grants.
  */
-export const isAdminFromRequest = async ({
+export const getCallerPrivileges = async ({
   esClient,
 }: {
   esClient: ElasticsearchClient;
-}): Promise<boolean> => {
+}): Promise<CallerPrivileges> => {
   try {
-    const { has_all_requested: isAdmin } = await esClient.security.hasPrivileges({
+    const response = await esClient.security.hasPrivileges({
+      cluster: [MANAGE_SECURITY_PRIVILEGE],
       application: [
         {
           application: KIBANA_APPLICATION,
@@ -225,11 +234,23 @@ export const isAdminFromRequest = async ({
       ],
     });
 
-    return isAdmin;
+    return {
+      isAdmin: response.application?.[KIBANA_APPLICATION]?.['*']?.[ADMIN_PRIVILEGE] ?? false,
+      canManageSecurity: response.cluster?.[MANAGE_SECURITY_PRIVILEGE] ?? false,
+    };
   } catch {
-    return false;
+    return { isAdmin: false, canManageSecurity: false };
   }
 };
+
+/**
+ * Returns `true` only for users with wildcard Elasticsearch privileges (for example `superuser`).
+ */
+export const isAdminFromRequest = async ({
+  esClient,
+}: {
+  esClient: ElasticsearchClient;
+}): Promise<boolean> => (await getCallerPrivileges({ esClient })).isAdmin;
 
 export const getAgentApiAccessFromRequest = async ({
   esClient,
